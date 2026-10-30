@@ -2,12 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>رافد - المساعد الذكي</title>
-  <meta name="description" content="روبوت تفاعلي ثلاثي الأبعاد يتحدث ويتحرك">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#013364">
+  <title>رافد | المساعد الذكي لجامعة جازان</title>
+  <meta name="description" content="رافد: روبوت تفاعلي ثلاثي الأبعاد يجيب عن أسئلتك حول جامعة جازان بالصوت والحركة">
+  <link rel="icon" href="logo.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
   {
@@ -19,21 +21,42 @@
   </script>
 </head>
 <body>
+<div id="app">
   <canvas id="scene"></canvas>
 
   <header class="topbar">
-    <span></span>
     <div class="brand">
-      <span class="dot"></span>
-      <h1>رافد <small>المساعد الذكي</small></h1>
+      <div class="mark"><img src="logo.png" alt="" draggable="false"></div>
+      <div class="brand-text">
+        <b>جامعة جازان</b>
+        <small>رافد · المساعد الذكي</small>
+      </div>
     </div>
-    <button id="muteBtn" class="icon-btn" type="button" title="كتم / تشغيل الصوت" aria-label="كتم الصوت">🔊</button>
+    <nav class="toolbar">
+      <span class="status" id="status"><span class="dot"></span><span id="statusText">جاهز</span></span>
+      <button id="muteBtn" class="tool" type="button" aria-label="كتم الصوت"><span id="muteIcon" aria-hidden="true">🔊</span><span>الصوت</span></button>
+    </nav>
   </header>
 
   <div id="bubble" class="bubble" aria-live="polite"></div>
 
-  <aside class="panel">
+  <aside class="panel glass">
+    <div class="panel-head">
+      <span class="eyebrow"><span class="dot"></span>اسألني عن جامعة جازان</span>
+    </div>
+
     <div id="chatLog" class="chat-log"></div>
+
+    <div class="suggest">
+      <button type="button" data-say="من رئيس الجامعة؟">رئيس الجامعة</button>
+      <button type="button" data-say="ما هي كليات الجامعة؟">الكليات</button>
+      <button type="button" data-say="ما شروط القبول؟">شروط القبول</button>
+      <button type="button" data-say="كم عدد الطلاب؟">الجامعة في أرقام</button>
+      <button type="button" data-say="ما هي أقسام كلية الطب؟">أقسام كلية الطب</button>
+      <button type="button" data-say="كيف أتواصل مع الجامعة؟">التواصل</button>
+      <button type="button" data-say="تصنيف الجامعة">التصنيفات</button>
+      <button type="button" data-say="آخر أخبار الجامعة">آخر الأخبار</button>
+    </div>
 
     <div class="quick">
       <button type="button" data-gesture="wave">👋 لوّح</button>
@@ -41,33 +64,31 @@
       <button type="button" data-gesture="presentL">🫴 قدّم</button>
       <button type="button" data-gesture="think">🤔 فكّر</button>
       <button type="button" data-gesture="nod">🙂 أومئ</button>
-      <button type="button" data-gesture="dance">🎉 ارقص</button>
-    </div>
-
-    <div class="suggest">
-      <button type="button" data-say="السلام عليكم">السلام عليكم</button>
-      <button type="button" data-say="من أنت؟">من أنت؟</button>
-      <button type="button" data-say="كيف أقدم طلب استئذان؟">كيف أقدم طلب استئذان؟</button>
-      <button type="button" data-say="قل لي نكتة">قل لي نكتة</button>
+      <button type="button" data-gesture="dance">🎉 احتفل</button>
     </div>
 
     <form id="chatForm" class="chat-form" autocomplete="off">
-      <button type="button" id="micBtn" class="icon-btn" title="تحدث بصوتك" aria-label="تحدث بصوتك">🎤</button>
-      <input id="chatInput" type="text" placeholder="اكتب رسالتك لرافد..." aria-label="رسالتك">
-      <button type="submit" class="send-btn">إرسال</button>
+      <button type="button" id="micBtn" class="mic" title="تحدث بصوتك" aria-label="تحدث بصوتك">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <input id="chatInput" type="text" placeholder="اكتب سؤالك عن الجامعة..." aria-label="سؤالك">
+      <button type="submit" class="btn send">إرسال</button>
     </form>
   </aside>
 
   <div id="startOverlay" class="overlay">
-    <div class="overlay-card">
+    <div class="overlay-card glass">
+      <div class="intro-mark"><img src="logo.png" alt=""></div>
+      <span class="eyebrow"><span class="dot"></span>المساعد الذكي لجامعة جازان</span>
+      <h1>مرحباً بك، أنا <span class="gradient">رافد</span></h1>
+      <p>اسألني بصوتك أو بالكتابة عن كليات الجامعة، والقبول، والخدمات، وأرقام الجامعة، وأجاوبك بالصوت والحركة.</p>
       <div class="spinner" id="spinner"></div>
-      <h2>مرحباً بك</h2>
-      <p>تعرّف على <b>رافد</b>، المساعد الذكي ثلاثي الأبعاد. يتكلم ويتحرك ويرد عليك بالصوت.</p>
-      <button id="startBtn" type="button" disabled>جارِ التحميل...</button>
-      <p class="hint">اسحب لتدوير المشهد • اضغط على رافد للتفاعل</p>
+      <button id="startBtn" class="btn gold" type="button" disabled>جارِ التحميل...</button>
+      <p class="hint">اسحب لتدوير المشهد · اضغط على رافد للتفاعل</p>
     </div>
   </div>
+</div>
 
-  <script type="module" src="robot.js"></script>
+<script type="module" src="robot.js"></script>
 </body>
 </html>
