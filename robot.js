@@ -947,7 +947,18 @@ function update(dt, t) {
 
   // lip sync: walk through the text, blending the current and next letter shapes
   let to = 0, tr = 0;
-  if (speaking && lip.text) {
+  if (voice.conv && voice.mode === 'speaking') {
+    // ElevenLabs voice: drive the jaw from the real output loudness,
+    // and lip rounding from how much energy sits in the low frequencies
+    to = Math.min(1, voice.conv.getOutputVolume() * 3.2);
+    const fq = voice.conv.getOutputByteFrequencyData();
+    if (fq) {
+      let lo = 0, hi = 0;
+      for (let i = 2; i < 12; i++) lo += fq[i];
+      for (let i = 24; i < 64; i++) hi += fq[i];
+      tr = THREE.MathUtils.clamp((lo / 10 - hi / 40) / 160, 0, 0.8) * to;
+    }
+  } else if (speaking && lip.text) {
     lip.cursor = Math.min(lip.cursor + dt * lip.rate, lip.text.length);
     const i = lip.cursor, f = i - Math.floor(i);
     const [o1, r1] = visemeAt(i), [o2, r2] = visemeAt(i + 1);
@@ -1099,6 +1110,108 @@ function speak(text) {
 }
 
 /* =====================================================================
+ * Human voice: ElevenLabs conversational agent
+ * The agent (voice, knowledge base, prompt) lives on ElevenLabs; the page
+ * only needs its public id. Set ELEVEN_AGENT_ID to '' to use the browser
+ * voice and the local answers in brain.js instead.
+ * ===================================================================== */
+const ELEVEN_AGENT_ID = 'agent_6001m674rt3gf7dbchmh7r82f8qa';
+const ELEVEN_CLIENT = 'https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.28.0/+esm';
+const VOICE_ENABLED = !!ELEVEN_AGENT_ID && !/localvoice/.test(location.search);
+const IDLE_END_MS = 75000; // end the session when nobody talks, to save credits
+const voice = { conv: null, mode: 'listening', connecting: false, failed: false, idle: 0, echo: '', nextGesture: null };
+
+function resetIdle() {
+  clearTimeout(voice.idle);
+  voice.idle = setTimeout(() => {
+    if (!voice.conv) return;
+    stopVoice();
+    addMsg('انتهت المحادثة لعدم النشاط. اضغط زر الميكروفون لنبدأ من جديد.', 'bot');
+  }, IDLE_END_MS);
+}
+
+async function startVoice() {
+  if (voice.conv || voice.connecting) return !!voice.conv;
+  voice.connecting = true;
+  synth?.cancel();
+  setStatus('يتصل...', true);
+  try {
+    const { Conversation } = await import(ELEVEN_CLIENT);
+    voice.conv = await Conversation.startSession({
+      agentId: ELEVEN_AGENT_ID,
+      connectionType: 'webrtc',
+      onConnect: () => {
+        micBtn.classList.add('active');
+        setStatus('يستمع', true);
+      },
+      onDisconnect: () => {
+        voice.conv = null;
+        voice.mode = 'listening';
+        speaking = false;
+        clearTimeout(voice.idle);
+        micBtn.classList.remove('active');
+        bubbleEl.classList.remove('show');
+        setStatus('جاهز');
+      },
+      onError: (message) => console.warn('ElevenLabs:', message),
+      onModeChange: ({ mode }) => {
+        voice.mode = mode;
+        speaking = mode === 'speaking';
+        setStatus(speaking ? 'يتحدث' : 'يستمع', true);
+        clearTimeout(bubbleTimer);
+        if (speaking) {
+          // open the answer with a gesture that fits the question
+          playGesture(voice.nextGesture || (chatLog.children.length < 2 ? 'wave' : 'presentR'));
+          voice.nextGesture = null;
+          nextTalkGesture = clock.elapsedTime + 2.5;
+        } else {
+          bubbleTimer = setTimeout(() => bubbleEl.classList.remove('show'), 2500);
+        }
+        resetIdle();
+      },
+      onMessage: ({ message, role, source }) => {
+        if (!message) return;
+        const fromUser = (role || source) === 'user';
+        if (fromUser) {
+          if (message.trim() === voice.echo.trim()) return; // typed message already shown
+          addMsg(message, 'user');
+          voice.nextGesture = answer(message).gesture;
+          playGesture('think', 1.2);
+        } else {
+          addMsg(message, 'bot');
+          bubbleEl.textContent = message;
+          bubbleEl.classList.add('show');
+        }
+        voice.echo = '';
+        resetIdle();
+      },
+    });
+    if (muted) voice.conv.setVolume({ volume: 0 });
+    resetIdle();
+    return true;
+  } catch (err) {
+    console.warn('ElevenLabs voice unavailable:', err);
+    voice.conv = null;
+    voice.failed = true;
+    setStatus('جاهز');
+    const why = /permission|notallowed/i.test(String(err?.name || err))
+      ? 'لم يُسمح باستخدام الميكروفون، لذلك سأكمل بالكتابة وصوت المتصفح.'
+      : 'تعذّر الاتصال بالصوت البشري، لذلك سأكمل بصوت المتصفح.';
+    addMsg(why, 'bot');
+    return false;
+  } finally {
+    voice.connecting = false;
+  }
+}
+
+async function stopVoice() {
+  clearTimeout(voice.idle);
+  const c = voice.conv;
+  voice.conv = null;
+  await c?.endSession();
+}
+
+/* =====================================================================
  * Conversation
  * ===================================================================== */
 const chatLog = document.getElementById('chatLog');
@@ -1124,6 +1237,15 @@ let busy = false;
 async function handleUser(text) {
   text = text.trim();
   if (!text || busy) return;
+  if (voice.conv) {
+    addMsg(text, 'user');
+    voice.echo = text;
+    voice.nextGesture = answer(text).gesture;
+    playGesture('think', 1.2);
+    voice.conv.sendUserMessage(text);
+    resetIdle();
+    return;
+  }
   busy = true;
   synth?.cancel();
   addMsg(text, 'user');
@@ -1159,7 +1281,7 @@ const GESTURE_LINES = {
 document.querySelectorAll('[data-gesture]').forEach((b) => b.addEventListener('click', () => {
   const g = b.dataset.gesture;
   playGesture(g);
-  if (GESTURE_LINES[g]) speak(GESTURE_LINES[g]);
+  if (GESTURE_LINES[g] && !voice.conv) speak(GESTURE_LINES[g]);
   nextTalkGesture = clock.elapsedTime + GESTURES[g].dur;
 }));
 
@@ -1168,6 +1290,7 @@ muteBtn.addEventListener('click', () => {
   muted = !muted;
   document.getElementById('muteIcon').textContent = muted ? '🔇' : '🔊';
   if (muted) synth?.cancel();
+  voice.conv?.setVolume({ volume: muted ? 0 : 1 });
 });
 
 // clicking on the robot
@@ -1187,7 +1310,10 @@ canvas.addEventListener('pointerup', (e) => {
     o = o.parent;
   }
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
-  if (onHead) {
+  if (voice.conv) {
+    // in a live voice conversation, react with motion only
+    playGesture(onHead ? 'laugh' : onHand ? 'wave' : 'surprised');
+  } else if (onHead) {
     playGesture('laugh');
     speak(pick(['ههههه! هذا يدغدغ!', 'انتبه على راسي، فيه كل معلومات الجامعة!']));
   } else if (onHand) {
@@ -1202,8 +1328,9 @@ canvas.addEventListener('pointerup', (e) => {
 // speech recognition
 const micBtn = document.getElementById('micBtn');
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let srToggle = null;
 if (!SR) {
-  micBtn.disabled = true;
+  if (!VOICE_ENABLED) micBtn.disabled = true;
   micBtn.title = 'التعرف على الصوت غير مدعوم في هذا المتصفح (جرّب Chrome أو Edge)';
 } else {
   const rec = new SR();
@@ -1232,7 +1359,7 @@ if (!SR) {
   rec.onerror = (e) => {
     input.placeholder = e.error === 'not-allowed' ? 'اسمح للمتصفح باستخدام الميكروفون' : 'لم أسمعك جيداً، حاول مرة أخرى';
   };
-  micBtn.addEventListener('click', () => {
+  srToggle = () => {
     if (listening) return rec.stop();
     synth?.cancel();
     finalText = '';
@@ -1241,8 +1368,14 @@ if (!SR) {
     setStatus('يستمع', true);
     playGesture('listen');
     try { rec.start(); } catch { listening = false; micBtn.classList.remove('active'); setStatus('جاهز'); }
-  });
+  };
 }
+micBtn.addEventListener('click', () => {
+  if (VOICE_ENABLED && !voice.failed) {
+    if (voice.conv) stopVoice();
+    else startVoice();
+  } else srToggle?.();
+});
 
 // start overlay (browsers require a user gesture before audio)
 const overlay = document.getElementById('startOverlay');
@@ -1253,9 +1386,11 @@ function onReady() {
   startBtn.classList.add('big-start');
   startBtn.textContent = 'ابدأ المحادثة';
 }
-startBtn.addEventListener('click', () => {
+startBtn.addEventListener('click', async () => {
   overlay.classList.add('hide');
   pickVoice();
+  // human voice via ElevenLabs; the agent greets the visitor itself
+  if (VOICE_ENABLED && await startVoice()) return;
   const greet = `السلام عليكم! أنا ${ROBOT_NAME}، المساعد الذكي لجامعة جازان. اسألني عن الكليات، أو القبول، أو خدمات الجامعة.`;
   addMsg(greet, 'bot');
   playGesture('wave');
@@ -1264,4 +1399,4 @@ startBtn.addEventListener('click', () => {
 });
 
 // exposed for debugging / integration
-window.robot = { speak, playGesture, handleUser, GESTURES, camera, controls, face };
+window.robot = { speak, playGesture, handleUser, GESTURES, camera, controls, face, voice, startVoice, stopVoice };
