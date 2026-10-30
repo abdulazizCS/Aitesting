@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>رافد - المساعد الذكي</title>
+  <meta name="description" content="روبوت تفاعلي ثلاثي الأبعاد يتحدث ويتحرك">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <header class="topbar">
+    <span></span>
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>رافد <small>المساعد الذكي</small></h1>
+    </div>
+    <button id="muteBtn" class="icon-btn" type="button" title="كتم / تشغيل الصوت" aria-label="كتم الصوت">🔊</button>
+  </header>
+
+  <div id="bubble" class="bubble" aria-live="polite"></div>
+
+  <aside class="panel">
+    <div id="chatLog" class="chat-log"></div>
+
+    <div class="quick">
+      <button type="button" data-gesture="wave">👋 لوّح</button>
+      <button type="button" data-gesture="chest">🤝 رحّب</button>
+      <button type="button" data-gesture="presentL">🫴 قدّم</button>
+      <button type="button" data-gesture="think">🤔 فكّر</button>
+      <button type="button" data-gesture="nod">🙂 أومئ</button>
+      <button type="button" data-gesture="dance">🎉 ارقص</button>
+    </div>
+
+    <div class="suggest">
+      <button type="button" data-say="السلام عليكم">السلام عليكم</button>
+      <button type="button" data-say="من أنت؟">من أنت؟</button>
+      <button type="button" data-say="كيف أقدم طلب استئذان؟">كيف أقدم طلب استئذان؟</button>
+      <button type="button" data-say="قل لي نكتة">قل لي نكتة</button>
+    </div>
+
+    <form id="chatForm" class="chat-form" autocomplete="off">
+      <button type="button" id="micBtn" class="icon-btn" title="تحدث بصوتك" aria-label="تحدث بصوتك">🎤</button>
+      <input id="chatInput" type="text" placeholder="اكتب رسالتك لرافد..." aria-label="رسالتك">
+      <button type="submit" class="send-btn">إرسال</button>
+    </form>
+  </aside>
+
+  <div id="startOverlay" class="overlay">
+    <div class="overlay-card">
+      <div class="spinner" id="spinner"></div>
+      <h2>مرحباً بك</h2>
+      <p>تعرّف على <b>رافد</b>، المساعد الذكي ثلاثي الأبعاد. يتكلم ويتحرك ويرد عليك بالصوت.</p>
+      <button id="startBtn" type="button" disabled>جارِ التحميل...</button>
+      <p class="hint">اسحب لتدوير المشهد • اضغط على رافد للتفاعل</p>
+    </div>
+  </div>
+
+  <script type="module" src="robot.js"></script>
+</body>
+</html>
