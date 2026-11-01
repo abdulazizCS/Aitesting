@@ -29,6 +29,19 @@ button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 
 #app { position: fixed; inset: 0; overflow: hidden; }
+/* page rotation for screens mounted sideways or upside down */
+html.rotation-90 #app, html.rotation-270 #app {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  height: 100vw;
+  width: 100dvh;
+  height: 100dvw;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+html.rotation-270 #app { transform: translate(-50%, -50%) rotate(-90deg); }
+html.rotation-180 #app { transform: rotate(180deg); }
 #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
 .glass {
@@ -295,25 +308,28 @@ button { cursor: pointer; }
 .spinner.done { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------- mobile ---------- */
+/* ---------- narrow / portrait: chat panel at the bottom ----------
+   #app.stacked is set by robot.js from the app's own size, so it also
+   applies when the page is rotated onto a portrait screen. */
 @media (max-width: 760px) {
   .topbar { padding: 10px 12px; }
   .mark { width: 38px; height: 38px; }
   .brand-text b { font-size: 16px; }
   .tool span:last-child { display: none; }
-  .panel {
-    top: auto;
-    inset-inline: 10px;
-    bottom: 10px;
-    width: auto;
-    height: 44vh;
-    padding: 10px;
-    gap: 8px;
-  }
-  .panel-head { display: none; }
-  .suggest, .quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .suggest button, .quick button { flex: none; }
-  .quick { display: none; }
+}
+#app.stacked .panel {
+  top: auto;
+  inset-inline: 10px;
+  bottom: 10px;
+  width: auto;
+  height: 44%;
+  padding: 10px;
+  gap: 8px;
+}
+#app.stacked .suggest, #app.stacked .quick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#app.stacked .suggest button, #app.stacked .quick button { flex: none; }
+@media (max-width: 760px) {
+  #app.stacked .panel-head, #app.stacked .quick { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

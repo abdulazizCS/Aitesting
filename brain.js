@@ -2,7 +2,7 @@
 // Jazan University knowledge base (kb.js, generated from data/jazanu-site.md).
 import { KB } from './kb.js';
 
-export const ROBOT_NAME = 'رافد';
+export const ROBOT_NAME = 'محمد';
 
 /* ---------------- Arabic text processing ---------------- */
 export const normalize = (s) => s

@@ -7,6 +7,30 @@ import { answer, ROBOT_NAME } from './brain.js';
 // lighter rendering on phones / when asked via ?lite
 const LITE = /lite/.test(location.search) || Math.min(innerWidth, innerHeight) < 560;
 
+/* ---------------- page rotation (0 / 90 / 180 / 270) ---------------- */
+// from ?rotate=90 in the link, otherwise the last choice on this screen
+const appEl = document.getElementById('app');
+let rotation = (() => {
+  const q = +new URLSearchParams(location.search).get('rotate');
+  if ([0, 90, 180, 270].includes(q) && location.search.includes('rotate')) return q;
+  try { return +localStorage.getItem('robot-rotation') || 0; } catch { return 0; }
+})();
+function applyRotation() {
+  document.documentElement.classList.remove('rotation-90', 'rotation-180', 'rotation-270');
+  if (rotation) document.documentElement.classList.add(`rotation-${rotation}`);
+  try { localStorage.setItem('robot-rotation', rotation); } catch { /* storage unavailable */ }
+}
+applyRotation();
+// size of the (possibly rotated) app, and screen point -> app point
+const appSize = () => [appEl.clientWidth, appEl.clientHeight];
+function toApp(cx, cy) {
+  const [w, h] = appSize();
+  if (rotation === 90) return [cy, innerWidth - cx];
+  if (rotation === 270) return [innerHeight - cy, cx];
+  if (rotation === 180) return [w - cx, h - cy];
+  return [cx, cy];
+}
+
 /* =====================================================================
  * Renderer / scene
  * ===================================================================== */
@@ -845,7 +869,8 @@ let listening = false;
 const cloth = { twist: 0, tv: 0, sway: new THREE.Vector2(), sv: new THREE.Vector2(), prevY: 0, prevZ: 0, prevX: 0 };
 
 window.addEventListener('pointermove', (e) => {
-  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  const [x, y] = toApp(e.clientX, e.clientY), [w, h] = appSize();
+  pointer.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
   lastPointerMove = clock.elapsedTime;
 });
 
@@ -974,8 +999,9 @@ function update(dt, t) {
     head.getWorldPosition(headWorld);
     headWorld.y += 0.3;
     headWorld.project(camera);
-    bubbleEl.style.left = `${(headWorld.x * 0.5 + 0.5) * innerWidth}px`;
-    bubbleEl.style.top = `${Math.max(150, (-headWorld.y * 0.5 + 0.5) * innerHeight)}px`;
+    const [aw, ah] = appSize();
+    bubbleEl.style.left = `${(headWorld.x * 0.5 + 0.5) * aw}px`;
+    bubbleEl.style.top = `${Math.max(150, (-headWorld.y * 0.5 + 0.5) * ah)}px`;
   }
 }
 
@@ -985,12 +1011,15 @@ function update(dt, t) {
 const panelEl = document.querySelector('.panel');
 const topbarEl = document.querySelector('.topbar');
 function resize() {
-  const w = innerWidth, h = innerHeight;
+  const [w, h] = appSize();
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  const mobile = w <= 760;
-  const pr = panelEl.getBoundingClientRect();
-  const top = topbarEl.getBoundingClientRect().height;
+  // narrow or portrait app: chat panel goes to the bottom (see #app.stacked in style.css)
+  const mobile = w <= 760 || h > w * 1.15;
+  appEl.classList.toggle('stacked', mobile);
+  // offset sizes ignore the CSS rotation
+  const pr = { width: panelEl.offsetWidth, height: panelEl.offsetHeight };
+  const top = topbarEl.offsetHeight;
   let ox = 0, oy, visW = w, visH;
   if (mobile) {
     visH = h - pr.height - top - 20;
@@ -1285,6 +1314,12 @@ document.querySelectorAll('[data-gesture]').forEach((b) => b.addEventListener('c
   nextTalkGesture = clock.elapsedTime + GESTURES[g].dur;
 }));
 
+document.getElementById('rotateBtn').addEventListener('click', () => {
+  rotation = (rotation + 90) % 360;
+  applyRotation();
+  resize();
+});
+
 const muteBtn = document.getElementById('muteBtn');
 muteBtn.addEventListener('click', () => {
   muted = !muted;
@@ -1299,7 +1334,8 @@ let downPos = null;
 canvas.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', (e) => {
   if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 6) return;
-  const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  const [x, y] = toApp(e.clientX, e.clientY), [w, h] = appSize();
+  const ndc = new THREE.Vector2((x / w) * 2 - 1, -(y / h) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
   const hit = raycaster.intersectObject(robot, true)[0];
   if (!hit) return;
