@@ -140,13 +140,13 @@ const Stats = {
 /* =====================================================================
  * Status, push-to-talk button, captions
  * ===================================================================== */
-const STATUS_TEXT = { idle: 'جاهز', connecting: 'يتصل...', ready: 'الميكروفون متوقف', listening: 'يستمع إليك', thinking: 'يفكر...', speaking: 'يتحدث' };
+const STATUS_TEXT = { idle: 'جاهز', connecting: 'يتصل...', ready: 'الميكروفون متوقف', listening: 'تستمع إليك', thinking: 'تفكر...', speaking: 'تتحدث' };
 const MIC_TEXT = {
-  idle: ['المس الشاشة للبدء', 'ثم تحدث مع محمد مباشرة'],
+  idle: ['المس الشاشة للبدء', 'ثم تحدث مع جازي مباشرة'],
   connecting: ['لحظة، أجهّز المحادثة...', ''],
-  listening: ['تحدث الآن، محمد يستمع', 'لا حاجة للضغط على أي زر'],
-  thinking: ['محمد يفكر...', ''],
-  speaking: ['محمد يتحدث', 'يمكنك مقاطعته بالكلام'],
+  listening: ['تحدث الآن، جازي تستمع', 'لا حاجة للضغط على أي زر'],
+  thinking: ['جازي تفكر...', ''],
+  speaking: ['جازي تتحدث', 'يمكنك مقاطعتها بالكلام'],
   ready: ['الميكروفون متوقف', 'المس هنا لتشغيله'],
 };
 let uiState = 'idle';
@@ -448,7 +448,7 @@ async function startSession({ quiet = false } = {}) {
   }
   localMicWanted = true;
   if (quiet) resumeLocalMic();
-  else speakLocal(`السلام عليكم! أنا ${ROBOT_NAME}، مرشدك الافتراضي في جامعة جازان. اضغط الزر وتحدث معي، أو اختر موضوعاً من الأسفل.`);
+  else speakLocal(`السلام عليكم! أنا ${ROBOT_NAME}، مرشدتك الافتراضية في جامعة جازان. تحدث معي مباشرة، أو اختر موضوعاً من الأعلى.`);
 }
 
 async function endSession() {
@@ -500,7 +500,7 @@ Robot.canvas.addEventListener('click', (e) => {
   if (!session.active) return;
   const [x, y] = toApp(e.clientX, e.clientY), [w, h] = appSize();
   const part = Robot.hitTest((x / w) * 2 - 1, -(y / h) * 2 + 1);
-  if (part) Robot.play(part === 'head' ? 'laugh' : part === 'hand' ? 'wave' : 'smallNod');
+  if (part) Robot.play(part === 'head' ? 'laugh' : part === 'antenna' ? 'surprised' : 'wave');
 });
 
 /* =====================================================================
@@ -625,7 +625,7 @@ function showResult() {
   const max = QUIZ_LEN * 10, s = quiz.score;
   const stars = s >= max * 0.8 ? 3 : s >= max * 0.5 ? 2 : s > 0 ? 1 : 0;
   quizEl.innerHTML = `<div class="result"><div class="stars">${'⭐'.repeat(stars)}${'☆'.repeat(3 - stars)}</div><div class="score">${s}</div><p>من ${max} نقطة</p>
-    <div class="result-actions"><button type="button" class="btn gold" data-q="again">🔁 تحدٍّ جديد</button><button type="button" class="btn ghost" data-q="close">العودة لمحمد</button></div></div>`;
+    <div class="result-actions"><button type="button" class="btn gold" data-q="again">🔁 تحدٍّ جديد</button><button type="button" class="btn ghost" data-q="close">العودة لجازي</button></div></div>`;
   if (stars >= 2) { Snd.play('win'); confetti(); Robot.play('dance'); } else Robot.play('chest');
   say(stars === 3 ? `ما شاء الله! حصلت على ${s} نقطة من ${max}. أنت بطل التحول الرقمي!` : stars === 2 ? `أحسنت! حصلت على ${s} نقطة. أداء رائع!` : `حصلت على ${s} نقطة. جرّب مرة ثانية وأكيد بتتحسن!`);
 }
@@ -755,7 +755,7 @@ $('#testBtn').addEventListener('click', async () => {
   if (session.active) await endSession();
   const r = await voice.selfTest();
   const ok = (b) => (b ? '✅' : '❌');
-  out.textContent = `${ok(navigator.onLine)} الاتصال بالإنترنت\n${ok(r.client)} تحميل مكتبة الصوت\n${ok(r.mic)} الميكروفون\n${ok(r.agent)} الاتصال بوكيل المحادثة (ElevenLabs)\n${r.agent ? 'جاهز للعرض.' : 'سيعمل محمد بالإجابات المحلية وصوت المتصفح.'}`;
+  out.textContent = `${ok(navigator.onLine)} الاتصال بالإنترنت\n${ok(r.client)} تحميل مكتبة الصوت\n${ok(r.mic)} الميكروفون\n${ok(r.agent)} الاتصال بوكيل المحادثة (ElevenLabs)\n${r.agent ? 'جاهز للعرض.' : 'ستعمل جازي بالإجابات المحلية وصوت المتصفح.'}`;
 });
 
 /* =====================================================================

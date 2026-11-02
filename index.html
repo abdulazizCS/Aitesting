@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#041c39">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>محمد | المرشد الافتراضي لجامعة جازان</title>
-  <meta name="description" content="محمد: مرشد افتراضي ثلاثي الأبعاد لجامعة جازان وملتقى التحول الرقمي 2026، يجيب بالصوت والحركة والمحتوى المرئي">
+  <title>جازي | المرشدة الافتراضية لجامعة جازان</title>
+  <meta name="description" content="جازي: مرشدة افتراضية ثلاثي الأبعاد لجامعة جازان وملتقى التحول الرقمي 2026، يجيب بالصوت والحركة والمحتوى المرئي">
   <link rel="icon" href="logo.png" type="image/png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,12 +28,12 @@
 <div id="app" class="portrait">
   <!-- animated identity background (behind the transparent 3D canvas) -->
   <div class="bg-fx" id="bgfx" aria-hidden="true"><b></b><b class="b2"></b></div>
-  <canvas id="scene" aria-label="الروبوت محمد"></canvas>
+  <canvas id="scene" aria-label="الروبوت جازي"></canvas>
 
   <header class="topbar">
     <div class="brand" id="brand" title="اضغط مطولاً لفتح الإعدادات">
       <div class="mark"><img src="logo.png" alt="" draggable="false"></div>
-      <div class="brand-text"><b>جامعة جازان</b><small>المرشد الافتراضي محمد</small></div>
+      <div class="brand-text"><b>جامعة جازان</b><small>المرشدة الافتراضية جازي</small></div>
     </div>
     <div class="tools">
       <div class="vol" role="group" aria-label="مستوى الصوت">
@@ -85,14 +85,14 @@
     <button type="button" class="mic-state" id="micBtn" aria-label="الميكروفون">
       <span class="mic-ring" id="micRing"></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path id="micSlash" d="M3 3l18 18" hidden/></svg>
-      <span class="mic-text"><b id="micLabel">تحدث مع محمد مباشرة</b><small id="micHint">لا حاجة للضغط على أي زر</small></span>
+      <span class="mic-text"><b id="micLabel">تحدث مع جازي مباشرة</b><small id="micHint">لا حاجة للضغط على أي زر</small></span>
     </button>
   </footer>
 
   <!-- on-screen keyboard (the device keyboard is not used in kiosk mode) -->
   <div id="keyboard" class="vkbd" hidden>
     <div class="vkbd-head">
-      <input id="kbdInput" type="text" placeholder="اكتب سؤالك لمحمد..." autocomplete="off" aria-label="سؤالك">
+      <input id="kbdInput" type="text" placeholder="اكتب سؤالك لجازي..." autocomplete="off" aria-label="سؤالك">
       <button type="button" class="vkbd-close" id="kbdClose" aria-label="إغلاق">✕</button>
     </div>
     <div class="vkbd-keys" id="kbdKeys"></div>
@@ -104,7 +104,7 @@
   <div id="attract" class="attract">
     <div class="attract-card">
       <span class="eyebrow"><span class="dot"></span>مرحباً بك في جامعة جازان</span>
-      <h1>أنا <span class="gradient">محمد</span><br>مرشدك الافتراضي</h1>
+      <h1>أنا <span class="gradient">جازي</span><br>مرشدتك الافتراضية</h1>
       <p>تحدث معي مباشرة عن الجامعة وخدماتها الرقمية وملتقى التحول الرقمي</p>
       <div class="touch-hint"><span class="hand">👆</span> المس الشاشة للبدء</div>
     </div>
@@ -139,7 +139,7 @@
   <div id="loader" class="loader">
     <img src="logo.png" alt="">
     <div class="loader-bar"><i id="loaderBar"></i></div>
-    <span id="loaderText">جارِ تجهيز محمد...</span>
+    <span id="loaderText">جارِ تجهيز جازي...</span>
   </div>
 </div>
 

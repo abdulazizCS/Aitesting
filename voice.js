@@ -122,10 +122,13 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
   /* ---------------- browser voice (fallback) ---------------- */
   const synth = window.speechSynthesis;
   let arVoice = null, localToken = 0;
+  // prefer a female Arabic voice (Jazi is a woman)
+  const FEMALE = /hoda|zariyah|salma|amina|amira|laila|layla|mariam|hala|noura|sara|female|woman/i;
+  const MALE = /naayf|hamed|shakir|tarik|male|maged|omar/i;
   const pickVoice = () => {
-    const vs = synth?.getVoices() || [];
-    arVoice = vs.find((v) => /^ar[-_]SA/i.test(v.lang) && /natural|online|neural/i.test(v.name))
-      || vs.find((v) => /^ar[-_]SA/i.test(v.lang)) || vs.find((v) => /^ar/i.test(v.lang)) || null;
+    const ar = (synth?.getVoices() || []).filter((v) => /^ar/i.test(v.lang));
+    const score = (v) => (/^ar[-_]SA/i.test(v.lang) ? 4 : 0) + (FEMALE.test(v.name) ? 3 : 0) - (MALE.test(v.name) ? 5 : 0) + (/natural|online|neural/i.test(v.name) ? 2 : 0);
+    arVoice = ar.sort((a, b) => score(b) - score(a))[0] || null;
   };
   if (synth) { pickVoice(); synth.addEventListener?.('voiceschanged', pickVoice); }
 
@@ -148,7 +151,7 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
         const u = new SpeechSynthesisUtterance(part);
         u.lang = arVoice?.lang || 'ar-SA';
         if (arVoice) u.voice = arVoice;
-        u.pitch = 1.05;
+        u.pitch = arVoice && FEMALE.test(arVoice.name) ? 1.05 : 1.25; // higher pitch if only a male voice exists
         u.volume = volume;
         u.onstart = () => robot.speakText(part);
         u.onboundary = (e) => robot.syncText(e.charIndex);
