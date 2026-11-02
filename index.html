@@ -2,11 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-  <meta name="theme-color" content="#013364">
-  <title>محمد | المساعد الذكي لجامعة جازان</title>
-  <meta name="description" content="محمد: روبوت تفاعلي ثلاثي الأبعاد يجيب عن أسئلتك حول جامعة جازان بالصوت والحركة">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#041c39">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>محمد | المرشد الافتراضي لجامعة جازان</title>
+  <meta name="description" content="محمد: مرشد افتراضي ثلاثي الأبعاد لجامعة جازان وملتقى التحول الرقمي 2026، يجيب بالصوت والحركة والمحتوى المرئي">
   <link rel="icon" href="logo.png" type="image/png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,82 +17,112 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
     }
   }
   </script>
+  <script src="vendor/qrcode.js" defer></script>
 </head>
 <body>
-<div id="app">
-  <canvas id="scene"></canvas>
+<div id="app" class="portrait">
+  <!-- animated identity background (behind the transparent 3D canvas) -->
+  <div class="bg-fx" id="bgfx" aria-hidden="true"><b></b><b class="b2"></b></div>
+  <canvas id="scene" aria-label="الروبوت محمد"></canvas>
 
   <header class="topbar">
-    <div class="brand">
+    <div class="brand" id="brand" title="اضغط مطولاً لفتح الإعدادات">
       <div class="mark"><img src="logo.png" alt="" draggable="false"></div>
-      <div class="brand-text">
-        <b>جامعة جازان</b>
-        <small>محمد · المساعد الذكي</small>
-      </div>
+      <div class="brand-text"><b>جامعة جازان</b><small>المرشد الافتراضي محمد</small></div>
     </div>
-    <nav class="toolbar">
-      <span class="status" id="status"><span class="dot"></span><span id="statusText">جاهز</span></span>
-      <button id="rotateBtn" class="tool" type="button" title="تدوير الصفحة (لشاشات العرض العمودية)" aria-label="تدوير الصفحة"><span aria-hidden="true">⟳</span><span id="rotateLabel">تدوير</span></button>
-      <button id="muteBtn" class="tool" type="button" aria-label="كتم الصوت"><span id="muteIcon" aria-hidden="true">🔊</span><span>الصوت</span></button>
-    </nav>
+    <div class="forum-badge">
+      <small>ملتقى التحول الرقمي 2026</small>
+      <b class="gradient">قيمة وأثر</b>
+    </div>
   </header>
 
-  <div id="bubble" class="bubble" aria-live="polite"></div>
+  <div id="stage" class="stage" aria-hidden="true"></div>
 
-  <aside class="panel glass">
-    <div class="panel-head">
-      <span class="eyebrow"><span class="dot"></span>اسألني عن جامعة جازان</span>
-    </div>
+  <div id="status" class="status-pill" data-state="idle" aria-live="polite">
+    <span class="status-icon"><i></i><i></i><i></i><i></i></span>
+    <span id="statusText">جاهز</span>
+  </div>
 
-    <div id="chatLog" class="chat-log"></div>
+  <div id="caption" class="caption" aria-live="polite"></div>
 
-    <div class="suggest">
-      <button type="button" data-say="من رئيس الجامعة؟">رئيس الجامعة</button>
-      <button type="button" data-say="ما هي كليات الجامعة؟">الكليات</button>
-      <button type="button" data-say="ما شروط القبول؟">شروط القبول</button>
-      <button type="button" data-say="كم عدد الطلاب؟">الجامعة في أرقام</button>
-      <button type="button" data-say="ما هي أقسام كلية الطب؟">أقسام كلية الطب</button>
-      <button type="button" data-say="كيف أتواصل مع الجامعة؟">التواصل</button>
-      <button type="button" data-say="تصنيف الجامعة">التصنيفات</button>
-      <button type="button" data-say="آخر أخبار الجامعة">آخر الأخبار</button>
-    </div>
+  <section id="cardLayer" class="card-layer" aria-live="polite"></section>
 
-    <div class="quick">
-      <button type="button" data-gesture="wave">👋 لوّح</button>
-      <button type="button" data-gesture="chest">🤝 رحّب</button>
-      <button type="button" data-gesture="presentL">🫴 قدّم</button>
-      <button type="button" data-gesture="think">🤔 فكّر</button>
-      <button type="button" data-gesture="nod">🙂 أومئ</button>
-      <button type="button" data-gesture="dance">🎉 احتفل</button>
-    </div>
-
-    <form id="chatForm" class="chat-form" autocomplete="off">
-      <button type="button" id="micBtn" class="mic" title="ابدأ / أنهِ المحادثة الصوتية" aria-label="المحادثة الصوتية">
+  <footer class="dock">
+    <div id="topics" class="topics" role="list"></div>
+    <div class="dock-main">
+      <button type="button" class="dock-btn" id="kbdBtn" aria-label="الكتابة"><span>⌨️</span><small>اكتب سؤالك</small></button>
+      <button type="button" class="ptt" id="pttBtn" aria-label="اضغط وتحدث مع محمد">
+        <span class="ptt-ring" id="pttRing"></span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        <b id="pttLabel">اضغط وتحدث مع محمد</b>
       </button>
-      <input id="chatInput" type="text" placeholder="اكتب سؤالك عن الجامعة..." aria-label="سؤالك">
-      <button type="submit" class="btn send">إرسال</button>
-    </form>
-  </aside>
-
-  <div id="startOverlay" class="overlay">
-    <div class="overlay-card glass">
-      <div class="intro-mark"><img src="logo.png" alt=""></div>
-      <span class="eyebrow"><span class="dot"></span>المساعد الذكي لجامعة جازان</span>
-      <h1>مرحباً بك، أنا <span class="gradient">محمد</span></h1>
-      <p>اسألني بصوتك أو بالكتابة عن كليات الجامعة، والقبول، والخدمات، وأرقام الجامعة، وأجاوبك بالصوت والحركة.</p>
-      <div class="spinner" id="spinner"></div>
-      <button id="startBtn" class="btn gold" type="button" disabled>جارِ التحميل...</button>
-      <p class="hint">اسحب لتدوير المشهد · اضغط على محمد للتفاعل</p>
+      <button type="button" class="dock-btn" id="replayBtn" aria-label="أعد الإجابة"><span>🔁</span><small>أعد الإجابة</small></button>
     </div>
+    <div class="dock-sub">
+      <button type="button" id="homeBtn">🏠 محادثة جديدة</button>
+      <button type="button" id="quizBtn">🎯 تحدي المعرفة</button>
+    </div>
+  </footer>
+
+  <!-- on-screen keyboard (the device keyboard is not used in kiosk mode) -->
+  <div id="keyboard" class="vkbd" hidden>
+    <div class="vkbd-head">
+      <input id="kbdInput" type="text" placeholder="اكتب سؤالك لمحمد..." autocomplete="off" aria-label="سؤالك">
+      <button type="button" class="vkbd-close" id="kbdClose" aria-label="إغلاق">✕</button>
+    </div>
+    <div class="vkbd-keys" id="kbdKeys"></div>
+  </div>
+
+  <div id="quiz" class="quiz" hidden></div>
+
+  <!-- welcome screen shown when nobody is using the kiosk -->
+  <div id="attract" class="attract">
+    <div class="attract-card">
+      <span class="eyebrow"><span class="dot"></span>مرحباً بك في جامعة جازان</span>
+      <h1>أنا <span class="gradient">محمد</span><br>مرشدك الافتراضي</h1>
+      <p>اسألني عن الجامعة وخدماتها الرقمية وملتقى التحول الرقمي</p>
+      <div class="touch-hint"><span class="hand">👆</span> المس الشاشة للبدء</div>
+    </div>
+  </div>
+
+  <div id="idleWarn" class="idle-warn" hidden>
+    <b>هل ما زلت هنا؟</b>
+    <span>سنعود للشاشة الرئيسية خلال <span id="idleCount">10</span> ثوانٍ</span>
+    <button type="button" id="stayBtn">نعم، أكمل</button>
+  </div>
+
+  <div id="qrZoom" class="qr-zoom" hidden></div>
+
+  <div id="settings" class="settings" hidden>
+    <div class="settings-sheet">
+      <div class="settings-head"><h2>إعدادات العرض</h2><button type="button" id="settingsClose" aria-label="إغلاق">✕</button></div>
+      <div class="set-row"><span>تدوير الشاشة</span><div class="seg" id="rotSeg"></div></div>
+      <div class="set-row"><span>مستوى الصوت</span><input type="range" id="volRange" min="0" max="100" step="5"></div>
+      <div class="set-row"><span>وضع المعرض (ملء الشاشة وإخفاء لوحة مفاتيح الجهاز)</span><label class="switch"><input type="checkbox" id="kioskChk"><i></i></label></div>
+      <div class="set-row"><span>العودة للبداية بعد عدم النشاط (ثانية)</span><input type="number" id="idleSecs" min="20" max="600" step="10"></div>
+      <div class="set-row"><span>اختبار الاتصال بالصوت والمحادثة</span><button type="button" id="testBtn">تشغيل الاختبار</button></div>
+      <div id="testOut" class="test-out"></div>
+      <div class="set-row"><span>إحصاءات الاستخدام (على هذا الجهاز فقط، دون بيانات شخصية)</span><button type="button" id="statsReset">تصفير</button></div>
+      <div id="statsOut" class="stats-out"></div>
+      <div class="set-actions">
+        <button type="button" id="fsBtn">ملء الشاشة</button>
+        <button type="button" id="reloadBtn">إعادة تحميل</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loader" class="loader">
+    <img src="logo.png" alt="">
+    <div class="loader-bar"><i id="loaderBar"></i></div>
+    <span id="loaderText">جارِ تجهيز محمد...</span>
   </div>
 </div>
 
-<script type="module" src="robot.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

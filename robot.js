@@ -1,41 +1,19 @@
+// 3D character "Mohammed": scene, model, animation, face and lip sync.
+// This module draws and moves the robot only; conversation, voice and the
+// interface live in app.js / voice.js and talk to it through the exported API.
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { answer, ROBOT_NAME } from './brain.js';
 
-// lighter rendering on phones / when asked via ?lite
-const LITE = /lite/.test(location.search) || Math.min(innerWidth, innerHeight) < 560;
-
-/* ---------------- page rotation (0 / 90 / 180 / 270) ---------------- */
-// from ?rotate=90 in the link, otherwise the last choice on this screen
-const appEl = document.getElementById('app');
-let rotation = (() => {
-  const q = +new URLSearchParams(location.search).get('rotate');
-  if ([0, 90, 180, 270].includes(q) && location.search.includes('rotate')) return q;
-  try { return +localStorage.getItem('robot-rotation') || 0; } catch { return 0; }
-})();
-function applyRotation() {
-  document.documentElement.classList.remove('rotation-90', 'rotation-180', 'rotation-270');
-  if (rotation) document.documentElement.classList.add(`rotation-${rotation}`);
-  try { localStorage.setItem('robot-rotation', rotation); } catch { /* storage unavailable */ }
-}
-applyRotation();
-// size of the (possibly rotated) app, and screen point -> app point
-const appSize = () => [appEl.clientWidth, appEl.clientHeight];
-function toApp(cx, cy) {
-  const [w, h] = appSize();
-  if (rotation === 90) return [cy, innerWidth - cx];
-  if (rotation === 270) return [innerHeight - cy, cx];
-  if (rotation === 180) return [w - cx, h - cy];
-  return [cx, cy];
-}
+// lighter rendering on weak devices / when asked via ?lite
+const LITE = /lite/.test(location.search) || Math.min(screen.width, screen.height) < 560;
 
 /* =====================================================================
  * Renderer / scene
  * ===================================================================== */
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setClearColor(0x000000, 0); // the animated identity background is drawn by CSS behind the canvas
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.5 : 1.75));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -44,7 +22,6 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
-scene.background = makeBackgroundTexture();
 scene.fog = new THREE.Fog(0x041c39, 4.5, 12);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
@@ -52,17 +29,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
 camera.position.set(0, 1.2, 4.4);
 
-const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 1.0, 0);
-controls.enableDamping = true;
-controls.enablePan = false;
-controls.minDistance = 1.2;
-controls.maxDistance = 7;
-controls.minPolarAngle = 0.9;
-controls.maxPolarAngle = 1.68;
-controls.minAzimuthAngle = -1.3;
-controls.maxAzimuthAngle = 1.3;
-controls.rotateSpeed = 0.6;
+const camTarget = new THREE.Vector3(0, 1.0, 0);
 
 // Studio lighting: warm key, cool fill, blue + green rims (identity colours)
 scene.add(new THREE.HemisphereLight(0xa9c8ff, 0x0a1a30, 0.55));
@@ -139,27 +106,6 @@ function canvasTex(w, h, draw, srgb = true) {
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = maxAniso;
   return t;
-}
-
-function makeBackgroundTexture() {
-  return canvasTex(1024, 1024, (g, w, h) => {
-    const grd = g.createRadialGradient(w * 0.5, h * 0.42, 40, w * 0.5, h * 0.5, w * 0.75);
-    grd.addColorStop(0, '#0f4c86');
-    grd.addColorStop(0.45, '#073363');
-    grd.addColorStop(1, '#03152d');
-    g.fillStyle = grd;
-    g.fillRect(0, 0, w, h);
-    // faint grid, as in the identity
-    g.strokeStyle = 'rgba(255,255,255,0.035)';
-    g.lineWidth = 1;
-    for (let x = 0; x <= w; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
-    for (let y = 0; y <= h; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-    const gl = g.createRadialGradient(w * 0.15, h * 0.15, 0, w * 0.15, h * 0.15, w * 0.35);
-    gl.addColorStop(0, 'rgba(43,182,115,0.14)');
-    gl.addColorStop(1, 'rgba(43,182,115,0)');
-    g.fillStyle = gl;
-    g.fillRect(0, 0, w, h);
-  });
 }
 
 // tileable normal map from a height function h(u, v) in [0,1]
@@ -605,7 +551,7 @@ function solveArm(arm, target, pole, wrist, curl, t) {
  * ===================================================================== */
 const face = {
   blink: 0, gx: 0, gy: 0, open: 0, round: 0,
-  moodK: { happy: 1, surprised: 0, think: 0, sad: 0 },
+  moodK: { happy: 1, surprised: 0, think: 0, sad: 0, listen: 0 },
 };
 const CYAN = '#5fe3ff';
 const scanlines = (() => {
@@ -685,6 +631,28 @@ function drawFace() {
     }
   }
 
+  // eyebrows: raised when listening or surprised, tilted when thinking or sad
+  g.save();
+  g.strokeStyle = 'rgba(95,227,255,0.85)';
+  g.lineCap = 'round';
+  g.lineWidth = 9;
+  g.shadowColor = CYAN;
+  g.shadowBlur = 12;
+  for (const side of [-1, 1]) {
+    const ex = 256 + side * 88 + face.gx * 6;
+    const lift = k.surprised * 16 + k.listen * 9 + k.happy * 3 - k.sad * 4 + (side > 0 ? k.think * 12 : -k.think * 2);
+    const tilt = side * (k.sad * 0.25 - k.think * 0.08) + (side > 0 ? -k.think * 0.15 : 0);
+    g.save();
+    g.translate(ex, eyeY - R - 26 - lift + face.gy * 4);
+    g.rotate(tilt);
+    g.beginPath();
+    g.moveTo(-34, 6);
+    g.quadraticCurveTo(0, -10 - k.happy * 3, 34, 6);
+    g.stroke();
+    g.restore();
+  }
+  g.restore();
+
   // mouth: open = jaw opening, round = lip rounding (و / ض)
   const open = face.open, round = face.round;
   const smile = 0.6 + k.happy * 0.5 - k.sad * 1.1 - k.think * 0.5;
@@ -739,14 +707,17 @@ function drawFace() {
 
 /* =====================================================================
  * Poses & gestures
+ * A pose = hand targets (IK) + wrist angles + finger curl + head/body angles.
+ * Gestures blend in and out over the idle pose; talk gestures are randomised
+ * every time so the robot never repeats exactly the same motion.
  * ===================================================================== */
 const PI = Math.PI;
+const rnd = (a, b) => a + Math.random() * (b - a);
 const mirrorArm = (a) => a && ({ t: [-a.t[0], a.t[1], a.t[2]], w: [a.w[0], -a.w[1], -a.w[2]], c: a.c, pole: [-a.pole[0], a.pole[1], a.pole[2]] });
 const restR = (t) => ({ t: [-0.29, 0.745 + 0.004 * Math.sin(t * 1.6), 0.045 + 0.006 * Math.sin(t * 0.4)], w: [0, 0, 0], c: 0.32, pole: [-0.4, -0.3, -1] });
 
 function idlePose(t) {
-  // slow weight shift from one leg to the other
-  const shift = Math.sin(t * 0.33);
+  const shift = Math.sin(t * 0.33); // slow weight shift
   return {
     r: restR(t),
     l: mirrorArm(restR(t + 0.7)),
@@ -756,37 +727,76 @@ function idlePose(t) {
   };
 }
 
-const presentR = (t) => ({ t: [-0.33, 0.93, 0.27], w: [0.25, -1.45, 0.15 + 0.05 * Math.sin(t * 2)], c: 0.15, pole: [-0.6, -0.4, -0.6] });
+const presentR = (t, h = 0.93, out = 0.33, fwd = 0.27) => ({ t: [-out, h, fwd], w: [0.25, -1.45, 0.15 + 0.05 * Math.sin(t * 2)], c: 0.15, pole: [-0.6, -0.4, -0.6] });
 const chestR = { t: [-0.04, 1.17, 0.215], w: [0.2, 1.2, 0.35], c: 0.08, pole: [-1, -0.6, -0.2] };
+const waveArm = (t) => ({ t: [-0.42, 1.5, 0.16], w: [0.15, -1.45, 0.35 * Math.sin(t * 11)], c: 0.05, pole: [-0.5, -1, -0.3] });
+const ease = (x) => x * x * (3 - 2 * x);
 
 const GESTURES = {
-  wave: { dur: 2.8, mood: 'happy', pose: (t) => ({
-    r: { t: [-0.42, 1.5, 0.16], w: [0.15, -1.45, 0.35 * Math.sin(t * 11)], c: 0.05, pole: [-0.5, -1, -0.3] },
-    head: [0.02, 0.08, 0.1], body: [0, 0.05, 0.01] }) },
-  waveL: { dur: 2.8, mood: 'happy', pose: (t) => ({
-    l: mirrorArm({ t: [-0.42, 1.5, 0.16], w: [0.15, -1.45, 0.35 * Math.sin(t * 11)], c: 0.05, pole: [-0.5, -1, -0.3] }),
-    head: [0.02, -0.08, -0.1], body: [0, -0.05, -0.01] }) },
+  wave: { dur: 2.8, mood: 'happy', pose: (t) => ({ r: waveArm(t), head: [0.02, 0.08, 0.1], body: [0, 0.05, 0.01] }) },
+  waveL: { dur: 2.8, mood: 'happy', pose: (t) => ({ l: mirrorArm(waveArm(t)), head: [0.02, -0.08, -0.1], body: [0, -0.05, -0.01] }) },
+  // turns toward the visitor, smiles, then waves
+  welcome: { dur: 3.6, mood: 'happy', pose: (t, p) => {
+    const turn = 1 - ease(Math.min(1, p * 3));
+    const raise = ease(THREE.MathUtils.clamp((p - 0.2) * 3, 0, 1));
+    return {
+      r: blend(restR(t), waveArm(t), raise),
+      head: [0.02, 0.35 * turn + 0.06, 0.1 * raise], body: [0, 0.4 * turn, 0.01], gaze: [0, 0],
+    };
+  } },
   chest: { dur: 3.0, mood: 'happy', pose: (t, p) => ({
     r: chestR,
     head: [0.28 * Math.sin(Math.min(1, p * 1.6) * PI), 0, 0.03], body: [0.1 * Math.sin(Math.min(1, p * 1.6) * PI), 0, 0] }) },
   presentR: { dur: 2.6, mood: 'happy', pose: (t) => ({ r: presentR(t), head: [0.05, -0.22, -0.05] }) },
   presentL: { dur: 2.6, mood: 'happy', pose: (t) => ({ l: mirrorArm(presentR(t)), head: [0.05, 0.22, 0.05] }) },
   both: { dur: 2.2, pose: (t) => ({ r: presentR(t), l: mirrorArm(presentR(t + 1)), head: [-0.04, 0, 0] }) },
-  think: { dur: 3.2, mood: 'think', pose: (t) => ({
+  // explaining while talking: side, height and spread are new every time
+  talk: { dur: 2, pose: (t, p, q) => {
+    const arm = presentR(t * q.speed, q.h, q.out, q.fwd);
+    arm.w = [q.wx, -1.45 + q.wy, 0.15 * Math.sin(t * q.speed * 2)];
+    const out = { head: [q.nod * Math.sin(p * PI * 2), q.side * 0.12, q.side * 0.04] };
+    if (q.side <= 0 || q.both) out.r = arm;
+    if (q.side > 0 || q.both) out.l = mirrorArm(q.both ? presentR(t + 1, q.h - 0.04, q.out, q.fwd) : arm);
+    return out;
+  }, params: () => ({
+    side: Math.random() < 0.5 ? -1 : 1, both: Math.random() < 0.25, h: rnd(0.86, 1.04), out: rnd(0.26, 0.38),
+    fwd: rnd(0.2, 0.3), wx: rnd(0.1, 0.4), wy: rnd(-0.2, 0.2), speed: rnd(0.8, 1.3), nod: rnd(0.02, 0.07),
+  }) },
+  // points at the information card and looks at it (q.dir: 'down' | 'left' | 'right' on screen)
+  point: { dur: 3.2, mood: 'happy', pose: (t, p, q) => {
+    if (q.dir === 'down') {
+      return { r: { t: [-0.3, 0.98, 0.38], w: [0.7, -1.2, 0], c: 0.1, pole: [-0.7, -0.6, -0.3] },
+        head: [0.24, -0.12, -0.04], gaze: [-0.25, 0.75] };
+    }
+    const arm = { t: [-0.52, 1.22, 0.22], w: [0.2, -1.4, 0], c: 0.08, pole: [-0.4, -1, -0.4] };
+    return q.dir === 'left'
+      ? { r: arm, head: [0.04, -0.35, 0], gaze: [-0.85, 0.1] }
+      : { l: mirrorArm(arm), head: [0.04, 0.35, 0], gaze: [0.85, 0.1] };
+  }, params: () => ({ dir: 'down' }) },
+  think: { dur: 3.2, mood: 'think', pose: () => ({
     r: { t: [-0.035, 1.43, 0.2], w: [0.3, 0.6, 1.2], c: 0.75, pole: [-0.6, -1, 0.1] },
     l: { t: [0.06, 1.03, 0.22], w: [0.3, -0.5, -1.4], c: 0.5, pole: [0.8, -0.6, -0.3] },
     head: [-0.12, 0.18, 0.14], gaze: [0.6, -0.8] }) },
   nod: { dur: 1.6, mood: 'happy', pose: (t, p) => ({ head: [0.22 * Math.abs(Math.sin(p * PI * 2)), 0, 0] }) },
+  smallNod: { dur: 1.2, pose: (t, p) => ({ head: [0.1 * Math.sin(p * PI), 0, 0] }) },
+  lookAround: { dur: 3.5, pose: (t, p) => ({ head: [0.02, 0.4 * Math.sin(p * PI * 2), 0.03 * Math.sin(p * PI * 2)], body: [0, 0.08 * Math.sin(p * PI * 2), 0] }) },
+  adjust: { dur: 2.4, pose: (t, p) => ({ r: { t: [-0.12, 1.22 - 0.03 * Math.sin(p * PI * 3), 0.19], w: [0.2, 1.1, 0.4], c: 0.5, pole: [-1, -0.6, -0.2] }, head: [0.1, -0.05, 0] }) },
   shake: { dur: 1.6, pose: (t, p) => ({ head: [0.05, 0.3 * Math.sin(p * PI * 3), 0] }) },
-  listen: { dur: 999, pose: (t) => ({
-    r: { t: [-0.3, 0.8, 0.1], w: [0, 0, 0], c: 0.35, pole: [-0.4, -0.3, -1] },
-    head: [0.08, 0.12, 0.18 + 0.02 * Math.sin(t * 2)], body: [0.03, 0, 0] }) },
   dance: { dur: 5.5, mood: 'happy', pose: (t) => {
     const s = Math.sin(t * 7), c = Math.cos(t * 3.5);
     return {
       r: { t: [-0.36 - 0.05 * c, 1.08 + 0.18 * s, 0.24], w: [0, -1.3, 0.3 * s], c: 0.2, pole: [-0.6, -1, -0.3] },
       l: { t: [0.36 - 0.05 * c, 1.08 - 0.18 * s, 0.24], w: [0, 1.3, 0.3 * s], c: 0.2, pole: [0.6, -1, -0.3] },
       head: [0.06 * s, 0.15 * c, 0.14 * s], body: [0, 0.22 * c, 0.035 * s], bounce: 0.015 * Math.abs(s),
+    };
+  } },
+  // correct quiz answer: both arms up with a little hop
+  celebrate: { dur: 2.6, mood: 'happy', pose: (t) => {
+    const s = Math.abs(Math.sin(t * 8));
+    return {
+      r: { t: [-0.4, 1.62 + 0.04 * s, 0.12], w: [0.1, -1.4, 0.3 * Math.sin(t * 12)], c: 0.6, pole: [-0.6, -1, -0.2] },
+      l: { t: [0.4, 1.62 + 0.04 * s, 0.12], w: [0.1, 1.4, -0.3 * Math.sin(t * 12)], c: 0.6, pole: [0.6, -1, -0.2] },
+      head: [-0.12, 0, 0.08 * Math.sin(t * 6)], body: [-0.04, 0, 0], bounce: 0.02 * s,
     };
   } },
   laugh: { dur: 2.2, mood: 'happy', pose: (t) => ({
@@ -801,13 +811,14 @@ const GESTURES = {
     l: { t: [0.36, 0.95, 0.2], w: [0.2, 1.6, -0.2], c: 0.1, pole: [0.9, -0.5, -0.2] },
     head: [0.05, 0, 0.14] }) },
 };
-const TALK_GESTURES = ['presentR', 'presentL', 'both', 'nod', 'presentR', 'presentL'];
+GESTURES.dance.mood = 'happy';
 
 let activeGesture = null;
-function playGesture(name, dur) {
+function playGesture(name, opts = {}) {
   const g = GESTURES[name];
   if (!g) return;
-  activeGesture = { name, g, start: clock.elapsedTime, dur: dur ?? g.dur };
+  const params = { ...(g.params ? g.params() : {}), ...opts };
+  activeGesture = { name, g, params, start: clock.elapsedTime, dur: opts.dur ?? g.dur };
 }
 function stopGesture(name) {
   if (activeGesture && (!name || activeGesture.name === name)) {
@@ -833,7 +844,9 @@ function damp(a, b, k) {
 }
 
 /* =====================================================================
- * Lip sync: letters of the spoken text are mapped to mouth shapes
+ * Lip sync
+ * Either a live source (ElevenLabs output loudness) or the letters of the
+ * text being spoken by the browser voice, mapped to mouth shapes.
  * ===================================================================== */
 const VISEME = (() => {
   const m = new Map();
@@ -845,7 +858,7 @@ const VISEME = (() => {
   set('سصزشثذتدطنلركقجخغ', 0.32, 0.05);  // other consonants
   return m;
 })();
-const lip = { text: '', cursor: 0, rate: 13 };
+const lip = { text: '', cursor: 0, rate: 13, source: null };
 function visemeAt(i) {
   const ch = lip.text[Math.floor(i)];
   if (!ch) return [0, 0];
@@ -854,70 +867,82 @@ function visemeAt(i) {
 }
 
 /* =====================================================================
- * Interaction state
+ * Behaviour state
  * ===================================================================== */
+const STATE_MOOD = { idle: 'happy', attract: 'happy', listening: 'listen', thinking: 'think', speaking: 'happy' };
+const IDLE_ACTIONS = ['smallNod', 'lookAround', 'adjust', 'presentL', 'smallNod', 'lookAround'];
 const clock = new THREE.Clock();
 const pointer = new THREE.Vector2(0, 0);
 const look = new THREE.Vector2(0, 0);
 const saccade = { x: 0, y: 0, next: 1 };
-let lastPointerMove = 0;
-let speaking = false;
+const lookHold = { x: 0, y: 0, until: 0 };
+let state = 'idle';
+let lastPointerMove = -10;
 let nextBlink = 2, blinkT = -1;
 let nextTalkGesture = 0;
-let nextIdleAction = 8;
-let listening = false;
+let nextIdleAction = 6;
+let lastIdleAction = '';
 const cloth = { twist: 0, tv: 0, sway: new THREE.Vector2(), sv: new THREE.Vector2(), prevY: 0, prevZ: 0, prevX: 0 };
-
-window.addEventListener('pointermove', (e) => {
-  const [x, y] = toApp(e.clientX, e.clientY), [w, h] = appSize();
-  pointer.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
-  lastPointerMove = clock.elapsedTime;
-});
 
 /* =====================================================================
  * Animation loop
  * ===================================================================== */
-const headWorld = new THREE.Vector3();
-const bubbleEl = document.getElementById('bubble');
 let cur = null;
+let faceT = 0;
 
 function update(dt, t) {
   let pose = idlePose(t);
-  let mood = 'happy';
+  let mood = STATE_MOOD[state] || 'happy';
   let gaze = null;
+
+  // state-driven posture
+  if (state === 'listening') {
+    pose.head = [0.08, 0.06, 0.16 + 0.015 * Math.sin(t * 1.8)];
+    pose.body = [0.03, 0, 0];
+    gaze = [0, 0.05];
+  } else if (state === 'thinking') {
+    pose.head = [-0.08, 0.12, 0.08];
+    gaze = [0.55 + 0.1 * Math.sin(t * 3), -0.75];
+  }
+
   if (activeGesture) {
     const el = t - activeGesture.start;
     const p = el / activeGesture.dur;
     if (p >= 1) activeGesture = null;
     else {
-      const w = THREE.MathUtils.smoothstep(el, 0, 0.4) * (1 - THREE.MathUtils.smoothstep(el, activeGesture.dur - 0.45, activeGesture.dur));
-      const gp = activeGesture.g.pose(t, p);
+      const w = THREE.MathUtils.smoothstep(el, 0, 0.45) * (1 - THREE.MathUtils.smoothstep(el, activeGesture.dur - 0.5, activeGesture.dur));
+      const gp = activeGesture.g.pose(t, p, activeGesture.params);
       pose = blend(pose, gp, w);
       if (w > 0.4 && activeGesture.g.mood) mood = activeGesture.g.mood;
-      if (gp.gaze) gaze = gp.gaze;
+      if (gp.gaze && w > 0.3) gaze = gp.gaze;
     }
   }
 
-  if (speaking && !activeGesture && t > nextTalkGesture) {
-    playGesture(TALK_GESTURES[Math.floor(Math.random() * TALK_GESTURES.length)], 1.6 + Math.random() * 0.8);
-    nextTalkGesture = t + 2.2 + Math.random() * 1.8;
+  if (state === 'speaking' && !activeGesture && t > nextTalkGesture) {
+    if (Math.random() < 0.8) playGesture('talk', { dur: rnd(1.6, 2.6) });
+    nextTalkGesture = t + rnd(2.4, 4.4);
   }
-  if (!speaking && !activeGesture && !listening && t > nextIdleAction) {
-    const opts = ['nod', 'presentL', 'waveL', 'think', 'shake'];
-    if (Math.random() < 0.5) playGesture(opts[Math.floor(Math.random() * opts.length)]);
-    nextIdleAction = t + 8 + Math.random() * 8;
+  if ((state === 'idle' || state === 'attract') && !activeGesture && t > nextIdleAction) {
+    if (state === 'attract') playGesture(Math.random() < 0.6 ? 'welcome' : 'presentL');
+    else {
+      const opts = IDLE_ACTIONS.filter((a) => a !== lastIdleAction);
+      lastIdleAction = opts[Math.floor(Math.random() * opts.length)];
+      playGesture(lastIdleAction);
+    }
+    nextIdleAction = t + (state === 'attract' ? rnd(9, 14) : rnd(9, 16));
   }
 
-  // look at the pointer, or wander when idle
-  const idleLook = t - lastPointerMove > 4;
-  const lx = idleLook ? 0.5 * Math.sin(t * 0.37) : pointer.x;
-  const ly = idleLook ? 0.25 * Math.sin(t * 0.23) : pointer.y;
+  // where to look: a held target (e.g. a card), the visitor's touch, or wander
+  let lx, ly;
+  if (t < lookHold.until) { lx = lookHold.x; ly = lookHold.y; }
+  else if (t - lastPointerMove < 4) { lx = pointer.x; ly = pointer.y; }
+  else { lx = 0.35 * Math.sin(t * 0.37); ly = 0.12 * Math.sin(t * 0.23); }
   const k = 1 - Math.exp(-dt * 4);
   look.x += (lx - look.x) * k;
   look.y += (ly - look.y) * k;
-  pose.head = [pose.head[0] - look.y * 0.18 + face.open * 0.025, pose.head[1] + look.x * 0.42, pose.head[2]];
+  pose.head = [pose.head[0] - look.y * 0.22 + face.open * 0.025, pose.head[1] + look.x * 0.42, pose.head[2]];
 
-  cur = cur ? damp(cur, pose, 1 - Math.exp(-dt * 8)) : pose;
+  cur = cur ? damp(cur, pose, 1 - Math.exp(-dt * 7)) : pose;
 
   solveArm(armR, cur.r.t, cur.r.pole, cur.r.w, cur.r.c, t);
   solveArm(armL, cur.l.t, cur.l.pole, cur.l.w, cur.l.c, t + 2);
@@ -944,14 +969,13 @@ function update(dt, t) {
   clothU.uSway.value.copy(cloth.sway);
   clothU.uTime.value = t;
 
-  // face mood
   for (const m in face.moodK) face.moodK[m] += ((m === mood ? 1 : 0) - face.moodK[m]) * (1 - Math.exp(-dt * 6));
 
-  // eyes: follow the pointer plus small quick saccades
+  // eyes: follow the look target plus small quick saccades
   if (t > saccade.next) {
-    saccade.x = (Math.random() - 0.5) * 0.35;
-    saccade.y = (Math.random() - 0.5) * 0.25;
-    saccade.next = t + 0.6 + Math.random() * 2.2;
+    saccade.x = (Math.random() - 0.5) * 0.3;
+    saccade.y = (Math.random() - 0.5) * 0.2;
+    saccade.next = t + rnd(0.6, 2.8);
   }
   const gx = gaze ? gaze[0] : look.x * 1.2 + saccade.x;
   const gy = gaze ? gaze[1] : -look.y * 1.2 + saccade.y;
@@ -966,24 +990,14 @@ function update(dt, t) {
     if (blinkT > 0.15) {
       blinkT = -1;
       face.blink = 0;
-      nextBlink = t + (Math.random() < 0.2 ? 0.25 : 2 + Math.random() * 3.5);
+      nextBlink = t + (Math.random() < 0.2 ? 0.25 : rnd(2, 5.5));
     }
   }
 
-  // lip sync: walk through the text, blending the current and next letter shapes
   let to = 0, tr = 0;
-  if (voice.conv && voice.mode === 'speaking') {
-    // ElevenLabs voice: drive the jaw from the real output loudness,
-    // and lip rounding from how much energy sits in the low frequencies
-    to = Math.min(1, voice.conv.getOutputVolume() * 3.2);
-    const fq = voice.conv.getOutputByteFrequencyData();
-    if (fq) {
-      let lo = 0, hi = 0;
-      for (let i = 2; i < 12; i++) lo += fq[i];
-      for (let i = 24; i < 64; i++) hi += fq[i];
-      tr = THREE.MathUtils.clamp((lo / 10 - hi / 40) / 160, 0, 0.8) * to;
-    }
-  } else if (speaking && lip.text) {
+  const live = lip.source?.();
+  if (live) [to, tr] = live;
+  else if (state === 'speaking' && lip.text) {
     lip.cursor = Math.min(lip.cursor + dt * lip.rate, lip.text.length);
     const i = lip.cursor, f = i - Math.floor(i);
     const [o1, r1] = visemeAt(i), [o2, r2] = visemeAt(i + 1);
@@ -993,446 +1007,92 @@ function update(dt, t) {
   const mk = 1 - Math.exp(-dt * 28);
   face.open += (to - face.open) * mk;
   face.round += (tr - face.round) * mk;
-  drawFace();
 
-  if (bubbleEl.classList.contains('show')) {
-    head.getWorldPosition(headWorld);
-    headWorld.y += 0.3;
-    headWorld.project(camera);
-    const [aw, ah] = appSize();
-    bubbleEl.style.left = `${(headWorld.x * 0.5 + 0.5) * aw}px`;
-    bubbleEl.style.top = `${Math.max(150, (-headWorld.y * 0.5 + 0.5) * ah)}px`;
-  }
+  // the face canvas is redrawn at ~40 fps to save GPU uploads
+  faceT += dt;
+  if (faceT > 0.024) { faceT = 0; drawFace(); }
+
+  // gentle camera drift so the scene never looks frozen
+  camera.position.x = camBase.x + 0.04 * Math.sin(t * 0.13);
+  camera.position.y = camBase.y + 0.02 * Math.sin(t * 0.17);
+  camera.position.z = camBase.z;
+  camera.lookAt(camTarget.x + camera.position.x * 0.5, camTarget.y, camTarget.z);
 }
 
 /* =====================================================================
- * Layout: keep the robot framed beside / above the chat panel
+ * Framing: fit the whole robot (head to hem) inside a rectangle of the app
  * ===================================================================== */
-const panelEl = document.querySelector('.panel');
-const topbarEl = document.querySelector('.topbar');
-function resize() {
-  const [w, h] = appSize();
-  renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-  // narrow or portrait app: chat panel goes to the bottom (see #app.stacked in style.css)
-  const mobile = w <= 760 || h > w * 1.15;
-  appEl.classList.toggle('stacked', mobile);
-  // offset sizes ignore the CSS rotation
-  const pr = { width: panelEl.offsetWidth, height: panelEl.offsetHeight };
-  const top = topbarEl.offsetHeight;
-  let ox = 0, oy, visW = w, visH;
-  if (mobile) {
-    visH = h - pr.height - top - 20;
-    oy = (pr.height + 10 - top) / 2;
-  } else {
-    visW = w - pr.width - 36;
-    visH = h - top;
-    ox = -(pr.width + 18) / 2; // panel sits on the left in RTL
-    oy = -top / 2;
-  }
-  camera.setViewOffset(w, h, ox, oy, w, h);
+const camBase = new THREE.Vector3(0, 1.05, 5);
+const ROBOT_H = 2.0, ROBOT_W = 1.15;
+function setFrame(rect, appW, appH) {
+  renderer.setSize(appW, appH, false);
+  camera.aspect = appW / appH;
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  camera.setViewOffset(appW, appH, appW / 2 - cx, appH / 2 - cy, appW, appH);
   camera.updateProjectionMatrix();
   const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const dH = (2.0 / 0.9) / (2 * tanHalf * (visH / h));
-  const dW = (1.1 / 0.9) / (2 * tanHalf * camera.aspect * (visW / w));
-  const dist = Math.max(dH, dW);
-  const dir = camera.position.clone().sub(controls.target).normalize();
-  camera.position.copy(controls.target).addScaledVector(dir, dist);
-  controls.maxDistance = Math.max(dist * 1.4, 4);
+  const dH = ROBOT_H / (2 * tanHalf * (rect.h / appH));
+  const dW = ROBOT_W / (2 * tanHalf * camera.aspect * (rect.w / appW));
+  camBase.z = Math.max(dH, dW);
 }
-window.addEventListener('resize', resize);
-resize();
 
-let firstFrame = true;
+const raycaster = new THREE.Raycaster();
+// nx, ny in -1..1 over the canvas; returns 'head' | 'hand' | 'body' | null
+function hitTest(nx, ny) {
+  raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  const hit = raycaster.intersectObject(robot, true)[0];
+  if (!hit) return null;
+  for (let o = hit.object; o; o = o.parent) {
+    if (o === head) return 'head';
+    if (o === armR.hand || o === armL.hand) return 'hand';
+  }
+  return 'body';
+}
+
+let readyCb = null, firstFrame = true;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   update(dt, clock.elapsedTime);
-  controls.update();
   renderer.render(scene, camera);
   if (firstFrame) {
     firstFrame = false;
-    onReady();
+    readyCb?.();
   }
 });
 
 /* =====================================================================
- * Speech (text-to-speech)
+ * Public API
  * ===================================================================== */
-const synth = window.speechSynthesis;
-let arVoice = null;
-let muted = false;
-function pickVoice() {
-  if (!synth) return;
-  const vs = synth.getVoices();
-  arVoice = vs.find((v) => /^ar[-_]SA/i.test(v.lang) && /natural|online|neural/i.test(v.name))
-    || vs.find((v) => /^ar[-_]SA/i.test(v.lang))
-    || vs.find((v) => /^ar/i.test(v.lang))
-    || null;
-}
-if (synth) {
-  pickVoice();
-  synth.addEventListener?.('voiceschanged', pickVoice);
-}
-
-const statusEl = document.getElementById('status');
-const statusText = document.getElementById('statusText');
-function setStatus(text, busy) {
-  statusText.textContent = text;
-  statusEl.classList.toggle('busy', !!busy);
-}
-
-let speakToken = 0;
-let bubbleTimer = 0;
-function speak(text) {
-  const token = ++speakToken;
-  synth?.cancel();
-  bubbleEl.textContent = text;
-  bubbleEl.classList.add('show');
-  clearTimeout(bubbleTimer);
-  speaking = true;
-  setStatus('يتحدث', true);
-  nextTalkGesture = Math.max(nextTalkGesture, clock.elapsedTime + 0.6);
-
-  return new Promise((resolve) => {
-    const finish = () => {
-      if (token !== speakToken) return resolve();
-      speaking = false;
-      lip.text = '';
-      setStatus('جاهز');
-      bubbleTimer = setTimeout(() => bubbleEl.classList.remove('show'), 1800);
-      resolve();
-    };
-    const est = 900 + text.length * 72;
-    if (!synth || muted) {
-      // no audio: still animate the mouth over the estimated duration
-      lip.text = text;
-      lip.cursor = 0;
-      lip.rate = text.length / (est / 1000);
-      setTimeout(finish, est);
-      return;
-    }
-    const parts = text.split(/(?<=[.!؟?،,])\s+/).filter(Boolean);
-    let remaining = parts.length;
-    const safety = setTimeout(finish, est * 2.5);
-    parts.forEach((part) => {
-      const u = new SpeechSynthesisUtterance(part);
-      u.lang = arVoice?.lang || 'ar-SA';
-      if (arVoice) u.voice = arVoice;
-      u.rate = 1;
-      u.pitch = 1.1;
-      u.onstart = () => {
-        lip.text = part;
-        lip.cursor = 0;
-        lip.rate = 13;
-      };
-      // re-sync the mouth with the voice at each word
-      u.onboundary = (e) => { if (e.charIndex >= 0) lip.cursor = e.charIndex; };
-      u.onend = u.onerror = () => {
-        if (--remaining <= 0) {
-          clearTimeout(safety);
-          finish();
-        }
-      };
-      synth.speak(u);
-    });
-  });
-}
-
-/* =====================================================================
- * Human voice: ElevenLabs conversational agent
- * The agent (voice, knowledge base, prompt) lives on ElevenLabs; the page
- * only needs its public id. Set ELEVEN_AGENT_ID to '' to use the browser
- * voice and the local answers in brain.js instead.
- * ===================================================================== */
-const ELEVEN_AGENT_ID = 'agent_6001m674rt3gf7dbchmh7r82f8qa';
-const ELEVEN_CLIENT = 'https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.28.0/+esm';
-const VOICE_ENABLED = !!ELEVEN_AGENT_ID && !/localvoice/.test(location.search);
-const IDLE_END_MS = 75000; // end the session when nobody talks, to save credits
-const voice = { conv: null, mode: 'listening', connecting: false, failed: false, idle: 0, echo: '', nextGesture: null };
-
-function resetIdle() {
-  clearTimeout(voice.idle);
-  voice.idle = setTimeout(() => {
-    if (!voice.conv) return;
-    stopVoice();
-    addMsg('انتهت المحادثة لعدم النشاط. اضغط زر الميكروفون لنبدأ من جديد.', 'bot');
-  }, IDLE_END_MS);
-}
-
-async function startVoice() {
-  if (voice.conv || voice.connecting) return !!voice.conv;
-  voice.connecting = true;
-  synth?.cancel();
-  setStatus('يتصل...', true);
-  try {
-    const { Conversation } = await import(ELEVEN_CLIENT);
-    voice.conv = await Conversation.startSession({
-      agentId: ELEVEN_AGENT_ID,
-      connectionType: 'webrtc',
-      onConnect: () => {
-        micBtn.classList.add('active');
-        setStatus('يستمع', true);
-      },
-      onDisconnect: () => {
-        voice.conv = null;
-        voice.mode = 'listening';
-        speaking = false;
-        clearTimeout(voice.idle);
-        micBtn.classList.remove('active');
-        bubbleEl.classList.remove('show');
-        setStatus('جاهز');
-      },
-      onError: (message) => console.warn('ElevenLabs:', message),
-      onModeChange: ({ mode }) => {
-        voice.mode = mode;
-        speaking = mode === 'speaking';
-        setStatus(speaking ? 'يتحدث' : 'يستمع', true);
-        clearTimeout(bubbleTimer);
-        if (speaking) {
-          // open the answer with a gesture that fits the question
-          playGesture(voice.nextGesture || (chatLog.children.length < 2 ? 'wave' : 'presentR'));
-          voice.nextGesture = null;
-          nextTalkGesture = clock.elapsedTime + 2.5;
-        } else {
-          bubbleTimer = setTimeout(() => bubbleEl.classList.remove('show'), 2500);
-        }
-        resetIdle();
-      },
-      onMessage: ({ message, role, source }) => {
-        if (!message) return;
-        const fromUser = (role || source) === 'user';
-        if (fromUser) {
-          if (message.trim() === voice.echo.trim()) return; // typed message already shown
-          addMsg(message, 'user');
-          voice.nextGesture = answer(message).gesture;
-          playGesture('think', 1.2);
-        } else {
-          addMsg(message, 'bot');
-          bubbleEl.textContent = message;
-          bubbleEl.classList.add('show');
-        }
-        voice.echo = '';
-        resetIdle();
-      },
-    });
-    if (muted) voice.conv.setVolume({ volume: 0 });
-    resetIdle();
-    return true;
-  } catch (err) {
-    console.warn('ElevenLabs voice unavailable:', err);
-    voice.conv = null;
-    voice.failed = true;
-    setStatus('جاهز');
-    const why = /permission|notallowed/i.test(String(err?.name || err))
-      ? 'لم يُسمح باستخدام الميكروفون، لذلك سأكمل بالكتابة وصوت المتصفح.'
-      : 'تعذّر الاتصال بالصوت البشري، لذلك سأكمل بصوت المتصفح.';
-    addMsg(why, 'bot');
-    return false;
-  } finally {
-    voice.connecting = false;
-  }
-}
-
-async function stopVoice() {
-  clearTimeout(voice.idle);
-  const c = voice.conv;
-  voice.conv = null;
-  await c?.endSession();
-}
-
-/* =====================================================================
- * Conversation
- * ===================================================================== */
-const chatLog = document.getElementById('chatLog');
-function addMsg(text, who, src) {
-  const el = document.createElement('div');
-  el.className = `msg ${who}`;
-  el.textContent = text;
-  if (src) {
-    const a = document.createElement('a');
-    a.className = 'src';
-    a.href = src;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = 'المصدر: موقع جامعة جازان ↗';
-    el.appendChild(a);
-  }
-  chatLog.appendChild(el);
-  chatLog.scrollTop = chatLog.scrollHeight;
-  return el;
-}
-
-let busy = false;
-async function handleUser(text) {
-  text = text.trim();
-  if (!text || busy) return;
-  if (voice.conv) {
-    addMsg(text, 'user');
-    voice.echo = text;
-    voice.nextGesture = answer(text).gesture;
-    playGesture('think', 1.2);
-    voice.conv.sendUserMessage(text);
-    resetIdle();
-    return;
-  }
-  busy = true;
-  synth?.cancel();
-  addMsg(text, 'user');
-  const typing = addMsg('...', 'bot typing');
-  setStatus('يفكر', true);
-  playGesture('think', 1.2);
-  await new Promise((r) => setTimeout(r, 650));
-  const reply = answer(text);
-  typing.remove();
-  addMsg(reply.text, 'bot', reply.src);
-  if (reply.gesture) playGesture(reply.gesture);
-  nextTalkGesture = clock.elapsedTime + (GESTURES[reply.gesture]?.dur ?? 1) + 0.5;
-  busy = false;
-  await speak(reply.speak);
-}
-
-/* =====================================================================
- * UI wiring
- * ===================================================================== */
-const form = document.getElementById('chatForm');
-const input = document.getElementById('chatInput');
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const v = input.value;
-  input.value = '';
-  handleUser(v);
-});
-document.querySelectorAll('[data-say]').forEach((b) => b.addEventListener('click', () => handleUser(b.dataset.say)));
-const GESTURE_LINES = {
-  wave: 'هلا والله!', chest: 'حياك الله في جامعة جازان.', presentL: 'تفضل!', think: 'أمممم... خلني أفكر.',
-  nod: 'أكيد!', dance: 'يا سلام! فرحتنا بطلاب جامعة جازان.',
+export const Robot = {
+  onReady(cb) { if (firstFrame) readyCb = cb; else cb(); },
+  setFrame,
+  hitTest,
+  get state() { return state; },
+  /** 'idle' | 'attract' | 'listening' | 'thinking' | 'speaking' */
+  setState(s) {
+    if (s === state) return;
+    state = s;
+    if (s === 'speaking') nextTalkGesture = clock.elapsedTime + 1.2;
+    if (s === 'thinking' && !activeGesture && Math.random() < 0.6) playGesture('think', { dur: 2.4 });
+    if (s === 'idle' || s === 'attract') nextIdleAction = clock.elapsedTime + 4;
+    if (s !== 'speaking') { lip.text = ''; }
+  },
+  play: playGesture,
+  stop: stopGesture,
+  gestures: Object.keys(GESTURES),
+  /** pointer position over the app, -1..1 */
+  setPointer(nx, ny) { pointer.set(nx, ny); lastPointerMove = clock.elapsedTime; },
+  /** look at a point of the app (-1..1) for a few seconds */
+  lookAt(nx, ny, seconds = 3) { Object.assign(lookHold, { x: nx, y: ny, until: clock.elapsedTime + seconds }); },
+  /** live mouth source: () => [open 0..1, round 0..1] or null */
+  setLipSource(fn) { lip.source = fn; },
+  /** letter-based mouth movement for the browser voice */
+  speakText(text, charsPerSecond = 13) { Object.assign(lip, { text, cursor: 0, rate: charsPerSecond }); },
+  syncText(charIndex) { if (charIndex >= 0) lip.cursor = charIndex; },
+  canvas,
 };
-document.querySelectorAll('[data-gesture]').forEach((b) => b.addEventListener('click', () => {
-  const g = b.dataset.gesture;
-  playGesture(g);
-  if (GESTURE_LINES[g] && !voice.conv) speak(GESTURE_LINES[g]);
-  nextTalkGesture = clock.elapsedTime + GESTURES[g].dur;
-}));
 
-document.getElementById('rotateBtn').addEventListener('click', () => {
-  rotation = (rotation + 90) % 360;
-  applyRotation();
-  resize();
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  window.dispatchEvent(new CustomEvent('robot-context-lost'));
 });
-
-const muteBtn = document.getElementById('muteBtn');
-muteBtn.addEventListener('click', () => {
-  muted = !muted;
-  document.getElementById('muteIcon').textContent = muted ? '🔇' : '🔊';
-  if (muted) synth?.cancel();
-  voice.conv?.setVolume({ volume: muted ? 0 : 1 });
-});
-
-// clicking on the robot
-const raycaster = new THREE.Raycaster();
-let downPos = null;
-canvas.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
-canvas.addEventListener('pointerup', (e) => {
-  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 6) return;
-  const [x, y] = toApp(e.clientX, e.clientY), [w, h] = appSize();
-  const ndc = new THREE.Vector2((x / w) * 2 - 1, -(y / h) * 2 + 1);
-  raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObject(robot, true)[0];
-  if (!hit) return;
-  let o = hit.object, onHead = false, onHand = false;
-  while (o) {
-    if (o === head) onHead = true;
-    if (o === armR.hand || o === armL.hand) onHand = true;
-    o = o.parent;
-  }
-  const pick = (a) => a[Math.floor(Math.random() * a.length)];
-  if (voice.conv) {
-    // in a live voice conversation, react with motion only
-    playGesture(onHead ? 'laugh' : onHand ? 'wave' : 'surprised');
-  } else if (onHead) {
-    playGesture('laugh');
-    speak(pick(['ههههه! هذا يدغدغ!', 'انتبه على راسي، فيه كل معلومات الجامعة!']));
-  } else if (onHand) {
-    playGesture('wave');
-    speak('هلا! تشرفت بالمصافحة.');
-  } else {
-    playGesture('surprised');
-    speak(pick(['أوه! وش تبي تعرف عن الجامعة؟', 'نعم؟ أنا هنا أسمعك.']));
-  }
-});
-
-// speech recognition
-const micBtn = document.getElementById('micBtn');
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let srToggle = null;
-if (!SR) {
-  if (!VOICE_ENABLED) micBtn.disabled = true;
-  micBtn.title = 'التعرف على الصوت غير مدعوم في هذا المتصفح (جرّب Chrome أو Edge)';
-} else {
-  const rec = new SR();
-  rec.lang = 'ar-SA';
-  rec.interimResults = true;
-  rec.maxAlternatives = 1;
-  let finalText = '';
-  rec.onresult = (e) => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-    input.value = finalText + interim;
-  };
-  rec.onend = () => {
-    listening = false;
-    micBtn.classList.remove('active');
-    stopGesture('listen');
-    setStatus('جاهز');
-    if (finalText.trim()) {
-      input.value = '';
-      handleUser(finalText);
-    }
-  };
-  rec.onerror = (e) => {
-    input.placeholder = e.error === 'not-allowed' ? 'اسمح للمتصفح باستخدام الميكروفون' : 'لم أسمعك جيداً، حاول مرة أخرى';
-  };
-  srToggle = () => {
-    if (listening) return rec.stop();
-    synth?.cancel();
-    finalText = '';
-    listening = true;
-    micBtn.classList.add('active');
-    setStatus('يستمع', true);
-    playGesture('listen');
-    try { rec.start(); } catch { listening = false; micBtn.classList.remove('active'); setStatus('جاهز'); }
-  };
-}
-micBtn.addEventListener('click', () => {
-  if (VOICE_ENABLED && !voice.failed) {
-    if (voice.conv) stopVoice();
-    else startVoice();
-  } else srToggle?.();
-});
-
-// start overlay (browsers require a user gesture before audio)
-const overlay = document.getElementById('startOverlay');
-const startBtn = document.getElementById('startBtn');
-function onReady() {
-  document.getElementById('spinner').classList.add('done');
-  startBtn.disabled = false;
-  startBtn.classList.add('big-start');
-  startBtn.textContent = 'ابدأ المحادثة';
-}
-startBtn.addEventListener('click', async () => {
-  overlay.classList.add('hide');
-  pickVoice();
-  // human voice via ElevenLabs; the agent greets the visitor itself
-  if (VOICE_ENABLED && await startVoice()) return;
-  const greet = `السلام عليكم! أنا ${ROBOT_NAME}، المساعد الذكي لجامعة جازان. اسألني عن الكليات، أو القبول، أو خدمات الجامعة.`;
-  addMsg(greet, 'bot');
-  playGesture('wave');
-  nextTalkGesture = clock.elapsedTime + 3;
-  speak(greet);
-});
-
-// exposed for debugging / integration
-window.robot = { speak, playGesture, handleUser, GESTURES, camera, controls, face, voice, startVoice, stopVoice };

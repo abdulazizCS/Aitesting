@@ -1,0 +1,12 @@
+{
+  "name": "محمد | المرشد الافتراضي لجامعة جازان",
+  "short_name": "محمد",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./?kiosk=1",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#041c39",
+  "theme_color": "#041c39",
+  "icons": [{ "src": "logo.png", "sizes": "252x300", "type": "image/png" }]
+}
