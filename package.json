@@ -1,0 +1,13 @@
+{
+  "name": "jazan-smart-assistant",
+  "private": true,
+  "description": "Jazan University smart assistant kiosk (3D robot) for the Digital Transformation Forum 2026",
+  "scripts": {
+    "kb": "python3 tools/build_kb.py",
+    "build": "esbuild app.js --bundle --splitting --format=esm --minify --charset=utf8 --target=es2020 --legal-comments=eof --outdir=dist --chunk-names=chunk-[hash]"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0",
+    "three": "0.160.0"
+  }
+}

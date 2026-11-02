@@ -1,19 +1,20 @@
 // Visual content shown next to Mohammed: topic buttons and information cards.
 // Everything here comes from data/jazanu-site.md (the university website data) or
-// the forum identity file. Edit this file to change what the screen shows.
-import { factsOf } from './brain.js';
+// data/forum.md (the forum guide). Edit this file to change what the screen shows.
 
 const JU = 'https://www.jazanu.edu.sa';
 
 /* Topic buttons at the bottom of the screen.
  * ask: what is sent to Mohammed when the button is pressed. */
 export const TOPICS = [
+  { id: 'forum', icon: '✨', label: 'عن الملتقى', ask: 'عرّفني بملتقى التحول الرقمي 2026' },
+  { id: 'forumCorners', icon: '🧭', label: 'أركان الملتقى', ask: 'ما أبرز أركان وفعاليات ملتقى التحول الرقمي؟' },
+  { id: 'forumGoals', icon: '🎯', label: 'أهداف الملتقى', ask: 'ما أهداف ملتقى التحول الرقمي؟' },
   { id: 'about', icon: '🏛️', label: 'عن الجامعة', ask: 'عرّفني بجامعة جازان باختصار' },
   { id: 'stats', icon: '📊', label: 'الجامعة في أرقام', ask: 'كم عدد الطلاب وأعضاء هيئة التدريس والكليات في جامعة جازان؟' },
   { id: 'colleges', icon: '🎓', label: 'الكليات', ask: 'ما هي كليات جامعة جازان؟' },
   { id: 'admission', icon: '📝', label: 'القبول', ask: 'ما شروط القبول في جامعة جازان؟' },
   { id: 'services', icon: '💻', label: 'الخدمات الرقمية', ask: 'ما هي الخدمات الإلكترونية في جامعة جازان؟' },
-  { id: 'forum', icon: '✨', label: 'ملتقى التحول الرقمي', ask: 'عرّفني بملتقى التحول الرقمي 2026' },
   { id: 'rankings', icon: '🏆', label: 'التصنيفات', ask: 'ما تصنيف جامعة جازان؟' },
   { id: 'contact', icon: '📞', label: 'التواصل', ask: 'كيف أتواصل مع جامعة جازان؟' },
   { id: 'quiz', icon: '🎯', label: 'تحدي المعرفة', quiz: true },
@@ -117,20 +118,82 @@ export const CARDS = {
     ],
     qr: { url: `${JU}/en/university-history`, label: 'عن المدينة الجامعية' },
   },
+  /* ---- Digital Transformation Forum 2026 (data/forum.md) ---- */
   forum: {
-    type: 'info', icon: '✨', title: 'ملتقى التحول الرقمي 2026',
-    subtitle: 'قيمة وأثر',
+    type: 'info', icon: '✨', title: 'ملتقى التحول الرقمي 2026', subtitle: 'قيمة وأثر · قيمة مؤسسية... وأثر ملموس',
     lines: [
-      ['🏛️', 'تنظمه جامعة جازان'],
-      ['🎮', 'تحديات تفاعلية في الأمن السيبراني والذكاء الاصطناعي والخدمات الرقمية'],
+      ['📅', '16 – 17 نوفمبر 2026م (يومان) – النسخة الثالثة'],
+      ['📍', 'كلية الفنون والعلوم الإنسانية بجامعة جازان'],
+      ['🏛️', 'تنظمه جامعة جازان ممثلة في عمادة الموارد البشرية والتقنية'],
+      ['🤖', 'متسق مع عام الذكاء الاصطناعي 2026 ويستعرض المنجزات الرقمية للجامعة وأثرها'],
     ],
     action: { label: '🎯 ابدأ تحدي المعرفة', quiz: true },
   },
-  news: () => ({ type: 'facts', icon: '📰', title: 'آخر الأخبار', facts: factsOf('الأخبار', 4).map((f) => f.split(' — ')[0]), qr: { url: `${JU}/ar/media-center/news`, label: 'المركز الإعلامي' } }),
-  events: () => ({ type: 'facts', icon: '📅', title: 'الفعاليات', facts: factsOf('الفعاليات', 4).map((f) => f.split(' — ')[0]), qr: { url: `${JU}/ar/media-center/events`, label: 'الفعاليات' } }),
-};
-
-// spoken fallback answers for topics that are not in the university data
-export const LOCAL_ANSWERS = {
-  forum: 'ملتقى التحول الرقمي 2026 تنظمه جامعة جازان بشعار «قيمة وأثر». وتقدر تختبر معلوماتك في التحول الرقمي والأمن السيبراني والذكاء الاصطناعي في تحدي المعرفة معي.',
+  forumStats: {
+    type: 'stats', icon: '📊', title: 'الملتقى في أرقام',
+    items: [
+      { value: 6500, prefix: '+', label: 'زائر متوقع' },
+      { value: 30, prefix: '+', label: 'فعالية مصاحبة' },
+      { value: 20, prefix: '+', label: 'متحدث' },
+      { value: 10, prefix: '+', label: 'جهة مشاركة' },
+    ],
+  },
+  forumGoals: {
+    type: 'steps', icon: '🎯', title: 'أهداف الملتقى',
+    steps: [
+      'تعزيز ثقافة التحول الرقمي وإبراز منجزاته بالجامعة',
+      'توضيح أثر المنصات والخدمات الرقمية على تجربة المستفيدين',
+      'ربط التحول الرقمي بالذكاء الاصطناعي والبيانات وذكاء الأعمال',
+      'تعزيز ثقافة الابتكار الرقمي داخل الجامعة',
+      'إبراز دور الجامعة في تمكين مجتمع منطقة جازان رقمياً',
+      'تعزيز الشراكات مع الجهات الحكومية والخاصة',
+    ],
+  },
+  forumCorners: {
+    type: 'tiles', icon: '🧭', title: 'أبرز الأركان والفعاليات',
+    tiles: [
+      { icon: '🖥️', label: 'المعرض الرقمي «قيمة وأثر»', info: 'استعراض أبرز مؤشرات الخدمات الرقمية عبر شاشات تفاعلية' },
+      { icon: '🤖', label: 'الذكاء الاصطناعي والتقنيات الناشئة', info: 'استعراض أبرز الخدمات والمنجزات في الذكاء الاصطناعي' },
+      { icon: '💡', label: 'الابتكار الرقمي', info: 'المشاريع الرقمية الفائزة في المعسكر والمشاريع الطلابية' },
+      { icon: '🤝', label: 'الرعاة والشركات التقنية', info: 'الحلول والمنتجات المقدمة من رعاة الملتقى' },
+      { icon: '🌐', label: 'المجتمع الرقمي', info: 'أبرز المبادرات الرقمية بمجتمع منطقة جازان' },
+      { icon: '🎤', label: 'جلسات حوارية وورش عمل', info: 'ورش عمل ودورات متخصصة في التحول الرقمي' },
+    ],
+    hint: 'المس أي ركن لمعرفة محتواه',
+  },
+  forumVenue: {
+    type: 'info', icon: '📍', title: 'موقع إقامة الملتقى', subtitle: 'كلية الفنون والعلوم الإنسانية',
+    lines: [
+      ['🏢', 'مساحة المعرض الرقمي: أجنحة الرعاة والخدمات الرقمية'],
+      ['🎙️', 'القاعة الرئيسية: الجلسات الحوارية وحفل الافتتاح'],
+      ['🧑‍🏫', 'قاعات الورش: ورش عمل متخصصة متوازية'],
+      ['📱', 'مساحات تفاعلية: شاشات وأركان رقمية تفاعلية'],
+    ],
+  },
+  forumAudience: {
+    type: 'list', icon: '👥', title: 'الفئات المستهدفة',
+    chips: ['مجتمع منطقة جازان', 'أعضاء هيئة التدريس والموظفون', 'طلبة الجامعة', 'الجهات الحكومية بمنطقة جازان', 'المختصون في التحول الرقمي',
+      'الشركات التقنية ومزودو الحلول الرقمية', 'رواد الأعمال والمبتكرون', 'المستفيدون من الخدمات الرقمية'],
+  },
+  forumSponsors: {
+    type: 'stats', icon: '💎', title: 'فئات الرعاية',
+    items: [
+      { value: 250000, suffix: ' ر.س', label: 'الشريك الاستراتيجي' },
+      { value: 150000, suffix: ' ر.س', label: 'الشريك الأساسي' },
+      { value: 100000, suffix: ' ر.س', label: 'الراعي الماسي' },
+    ],
+    note: 'من المزايا: جناح في المعرض الرقمي، وإبراز الشعار في الجلسات والشاشات والحملة الإعلانية، وشهادة ودرع رعاية رسمية. للتواصل: 920066664',
+  },
+  forumContact: {
+    type: 'info', icon: '📞', title: 'التواصل مع الملتقى',
+    lines: [
+      ['🏛️', 'جامعة جازان – عمادة الموارد البشرية والتقنية'],
+      ['☎️', 'الهاتف: 920066664'],
+      ['✉️', 'البريد: dxf@jazanu.edu.sa'],
+    ],
+    qr: { url: 'mailto:dxf@jazanu.edu.sa', label: 'مراسلة الملتقى' },
+  },
+  // news / events read the latest items from the knowledge base (factsOf is passed in)
+  news: (factsOf) => ({ type: 'facts', icon: '📰', title: 'آخر الأخبار', facts: factsOf('الأخبار', 4).map((f) => f.split(' — ')[0]), qr: { url: `${JU}/ar/media-center/news`, label: 'المركز الإعلامي' } }),
+  events: (factsOf) => ({ type: 'facts', icon: '📅', title: 'الفعاليات', facts: factsOf('الفعاليات', 4).map((f) => f.split(' — ')[0]), qr: { url: `${JU}/ar/media-center/events`, label: 'الفعاليات' } }),
 };

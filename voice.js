@@ -189,6 +189,8 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
       if (state === 'listening' || state === 'ready') set(on ? 'listening' : 'ready');
     },
     connect, disconnect, pttStart, pttStop, sendText, lipSample, speakLocal, stopLocal, selfTest,
+    /** download the voice client in the background so the first conversation starts faster */
+    preload() { if (agentId) import(CLIENT_URL).catch(() => {}); },
     /** microphone loudness 0..1 while listening (drives the button ring) */
     inputLevel() { try { return conv?.getInputVolume?.() ?? 0; } catch { return 0; } },
     setVolume(v) {

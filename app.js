@@ -3,7 +3,9 @@
 // content.js, quiz.js) are separate modules; this file only wires them together.
 import { Robot } from './robot.js';
 import { createVoice } from './voice.js';
-import { answer, ROBOT_NAME } from './brain.js';
+// local answers + knowledge base load in the background so the first screen appears faster
+let brain = null;
+const brainReady = import('./brain.js').then((m) => { brain = m; return m; });
 import { TOPICS, CARDS } from './content.js';
 import { QUIZ } from './quiz.js';
 
@@ -142,11 +144,11 @@ const Stats = {
  * ===================================================================== */
 const STATUS_TEXT = { idle: 'جاهز', connecting: 'يتصل...', ready: 'الميكروفون متوقف', listening: 'تستمع إليك', thinking: 'تفكر...', speaking: 'تتحدث' };
 const MIC_TEXT = {
-  idle: ['المس الشاشة للبدء', 'ثم تحدث مع جازي مباشرة'],
+  idle: ['المس الشاشة للبدء', 'ثم تحدث مع المساعدة الذكية مباشرة'],
   connecting: ['لحظة، أجهّز المحادثة...', ''],
-  listening: ['تحدث الآن، جازي تستمع', 'لا حاجة للضغط على أي زر'],
-  thinking: ['جازي تفكر...', ''],
-  speaking: ['جازي تتحدث', 'يمكنك مقاطعتها بالكلام'],
+  listening: ['تحدث الآن، المساعدة تستمع', 'لا حاجة للضغط على أي زر'],
+  thinking: ['المساعدة تفكر...', ''],
+  speaking: ['المساعدة تتحدث', 'يمكنك مقاطعتها بالكلام'],
   ready: ['الميكروفون متوقف', 'المس هنا لتشغيله'],
 };
 let uiState = 'idle';
@@ -182,7 +184,7 @@ function showCaption(text, who = 'bot') {
   clearTimeout(captionHide);
   captionEl.classList.toggle('user', who === 'user');
   captionEl.classList.add('show');
-  const label = who === 'user' ? 'أنت:' : `${ROBOT_NAME}:`;
+  const label = who === 'user' ? 'أنت:' : 'المساعدة:';
   const head = `<span class="who">${label}</span>`;
   if (who === 'user') {
     captionEl.innerHTML = `<span>${head}${esc(text)}</span>`;
@@ -226,7 +228,7 @@ function cardHTML(c) {
     main = `<ol class="steps">${c.steps.map((t, n) => `<li ${i(n)}>${esc(t)}</li>`).join('')}</ol>`;
     if (c.bars) main += `<div class="bars"><h3>${esc(c.barsTitle || '')}</h3>${c.bars.map(([l, v]) => `<div class="bar"><span>${esc(l)}</span><div><i data-w="${v}"></i></div><b>${v}%</b></div>`).join('')}</div>`;
   } else if (c.type === 'tiles') {
-    main = `<div class="tiles">${c.tiles.map((t, n) => `<button type="button" class="tile" ${i(n)} data-qr="${esc(t.url)}" data-label="${esc(t.label)}"><span>${t.icon}</span>${esc(t.label)}</button>`).join('')}</div>`;
+    main = `<div class="tiles">${c.tiles.map((t, n) => `<button type="button" class="tile" ${i(n)} ${t.url ? `data-qr="${esc(t.url)}"` : `data-info="${esc(t.info || '')}"`} data-label="${esc(t.label)}"><span>${t.icon}</span>${esc(t.label)}</button>`).join('')}</div>`;
   } else if (c.type === 'facts') {
     main = `<ul class="lines">${c.facts.map((t, n) => `<li ${i(n)}><span>•</span><span>${esc(t)}</span></li>`).join('')}</ul>`;
   }
@@ -241,7 +243,7 @@ function cardHTML(c) {
 
 function showCard(spec) {
   let c = typeof spec === 'string' ? CARDS[spec] : spec;
-  if (typeof c === 'function') c = c();
+  if (typeof c === 'function') c = c(brain?.factsOf || (() => []));
   if (!c) return;
   if (!c.type) { // a card built from the knowledge base search
     c = { type: 'facts', icon: '📌', title: c.title, facts: c.facts.slice(0, 3), qr: c.src ? { url: c.src, label: 'المصدر' } : null };
@@ -282,6 +284,14 @@ cardLayer.addEventListener('click', (e) => {
   if (b.dataset.action === 'close') { Snd.play('close'); hideCard(); }
   else if (b.dataset.action === 'quiz') startQuiz();
   else if (b.dataset.qr) openQR(b.dataset.qr, b.dataset.label);
+  else if (b.dataset.info !== undefined) {
+    // corner tiles: show what the corner contains
+    Snd.play('tap');
+    b.parentElement.querySelectorAll('.tile').forEach((t) => t.classList.toggle('on', t === b));
+    const hint = b.closest('.card').querySelector('.card-hint');
+    if (hint) hint.textContent = `${b.dataset.label}: ${b.dataset.info}`;
+    touch();
+  }
 });
 
 function openQR(url, label) {
@@ -323,8 +333,9 @@ voice.setVolume(settings.volume);
 Robot.setLipSource(() => voice.lipSample());
 
 // matching card + gesture for a question (the spoken answer comes from the agent)
+const NO_ANSWER = { card: null, gesture: 'smallNod', speak: 'لحظة من فضلك، أجهّز المعلومات.' };
 function reactTo(text) {
-  const a = answer(text);
+  const a = brain ? brain.answer(text) : NO_ANSWER;
   if (a.card) setTimeout(() => showCard(a.card), 400);
   else hideCard();
   if (a.gesture && !a.card) Robot.play(a.gesture === 'shrug' ? 'smallNod' : a.gesture);
@@ -345,6 +356,7 @@ async function ask(text, topicId) {
     return;
   }
   // offline / no agent: local answers + browser voice
+  await brainReady;
   const a = reactTo(text);
   setUiState('thinking');
   await new Promise((r) => setTimeout(r, 500));
@@ -448,7 +460,7 @@ async function startSession({ quiet = false } = {}) {
   }
   localMicWanted = true;
   if (quiet) resumeLocalMic();
-  else speakLocal(`السلام عليكم! أنا ${ROBOT_NAME}، مرشدتك الافتراضية في جامعة جازان. تحدث معي مباشرة، أو اختر موضوعاً من الأعلى.`);
+  else speakLocal(`السلام عليكم! أنا المساعدة الذكية لجامعة جازان، حيّاك الله. تحدث معي مباشرة، أو اختر موضوعاً من الأعلى.`);
 }
 
 async function endSession() {
@@ -625,7 +637,7 @@ function showResult() {
   const max = QUIZ_LEN * 10, s = quiz.score;
   const stars = s >= max * 0.8 ? 3 : s >= max * 0.5 ? 2 : s > 0 ? 1 : 0;
   quizEl.innerHTML = `<div class="result"><div class="stars">${'⭐'.repeat(stars)}${'☆'.repeat(3 - stars)}</div><div class="score">${s}</div><p>من ${max} نقطة</p>
-    <div class="result-actions"><button type="button" class="btn gold" data-q="again">🔁 تحدٍّ جديد</button><button type="button" class="btn ghost" data-q="close">العودة لجازي</button></div></div>`;
+    <div class="result-actions"><button type="button" class="btn gold" data-q="again">🔁 تحدٍّ جديد</button><button type="button" class="btn ghost" data-q="close">العودة للمساعدة</button></div></div>`;
   if (stars >= 2) { Snd.play('win'); confetti(); Robot.play('dance'); } else Robot.play('chest');
   say(stars === 3 ? `ما شاء الله! حصلت على ${s} نقطة من ${max}. أنت بطل التحول الرقمي!` : stars === 2 ? `أحسنت! حصلت على ${s} نقطة. أداء رائع!` : `حصلت على ${s} نقطة. جرّب مرة ثانية وأكيد بتتحسن!`);
 }
@@ -665,24 +677,33 @@ function confetti() {
 }
 
 /* =====================================================================
- * Settings panel: long-press the logo for 2 seconds, or press F2
+ * Settings: side tab at the screen edge (also long-press the logo for 2 s, or F2)
  * ===================================================================== */
 const settingsEl = $('#settings');
 function openSettings() {
   $('#rotSeg').innerHTML = [0, 90, 180, 270].map((r) => `<button type="button" data-r="${r}" class="${r === settings.rotation ? 'on' : ''}">${r}°</button>`).join('');
-  $('#volRange').value = Math.round(settings.volume * 100);
   $('#kioskChk').checked = settings.kiosk;
   $('#idleSecs').value = settings.idleSecs;
   $('#statsOut').textContent = Stats.text();
-  settingsEl.hidden = false;
+  settingsEl.classList.add('open');
+  app.classList.add('drawer-open');
+  $('#settingsTab').setAttribute('aria-expanded', 'true');
 }
+function closeSettings() {
+  settingsEl.classList.remove('open');
+  app.classList.remove('drawer-open');
+  $('#settingsTab').setAttribute('aria-expanded', 'false');
+}
+const settingsOpen = () => settingsEl.classList.contains('open');
+$('#settingsTab').addEventListener('click', () => { Snd.play('tap'); settingsOpen() ? closeSettings() : openSettings(); });
+$('#drawerShade').addEventListener('click', closeSettings);
 let pressTimer = 0;
 $('#brand').addEventListener('pointerdown', () => {
   $('#brand').classList.add('pressing');
   pressTimer = setTimeout(() => { $('#brand').classList.remove('pressing'); openSettings(); }, 2000);
 });
 ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('#brand').addEventListener(ev, () => { clearTimeout(pressTimer); $('#brand').classList.remove('pressing'); }));
-$('#settingsClose').addEventListener('click', () => { settingsEl.hidden = true; });
+$('#settingsClose').addEventListener('click', closeSettings);
 function setRotation(r) {
   settings.rotation = ((r % 360) + 360) % 360;
   save();
@@ -694,6 +715,7 @@ $('#rotateBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   Snd.play('tap');
   setRotation(settings.rotation + 90);
+  openSettings();
 });
 $('#rotSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button');
@@ -704,7 +726,6 @@ $('#rotSeg').addEventListener('click', (e) => {
   openSettings();
   requestAnimationFrame(layout);
 });
-$('#volRange').addEventListener('input', (e) => setVolume(e.target.value / 100));
 
 /* volume controls in the header */
 let volBeforeMute = 0.9;
@@ -747,7 +768,6 @@ document.addEventListener('webkitfullscreenchange', updateFsUI);
 $('#kioskChk').addEventListener('change', (e) => { settings.kiosk = e.target.checked; save(); if (settings.kiosk) enterFullscreen(); });
 $('#idleSecs').addEventListener('change', (e) => { settings.idleSecs = Math.max(20, +e.target.value || 60); save(); });
 $('#statsReset').addEventListener('click', () => { Stats.data = { sessions: 0, seconds: 0, questions: 0, voice: 0, quizzes: 0, topics: {} }; store.set('stats', Stats.data); $('#statsOut').textContent = Stats.text(); });
-$('#fsBtn').addEventListener('click', enterFullscreen);
 $('#reloadBtn').addEventListener('click', () => location.reload());
 $('#testBtn').addEventListener('click', async () => {
   const out = $('#testOut');
@@ -755,7 +775,7 @@ $('#testBtn').addEventListener('click', async () => {
   if (session.active) await endSession();
   const r = await voice.selfTest();
   const ok = (b) => (b ? '✅' : '❌');
-  out.textContent = `${ok(navigator.onLine)} الاتصال بالإنترنت\n${ok(r.client)} تحميل مكتبة الصوت\n${ok(r.mic)} الميكروفون\n${ok(r.agent)} الاتصال بوكيل المحادثة (ElevenLabs)\n${r.agent ? 'جاهز للعرض.' : 'ستعمل جازي بالإجابات المحلية وصوت المتصفح.'}`;
+  out.textContent = `${ok(navigator.onLine)} الاتصال بالإنترنت\n${ok(r.client)} تحميل مكتبة الصوت\n${ok(r.mic)} الميكروفون\n${ok(r.agent)} الاتصال بوكيل المحادثة (ElevenLabs)\n${r.agent ? 'جاهز للعرض.' : 'ستعمل المساعدة بالإجابات المحلية وصوت المتصفح.'}`;
 });
 
 /* =====================================================================
@@ -769,7 +789,7 @@ addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('dragstart', (e) => e.preventDefault());
 addEventListener('gesturestart', (e) => e.preventDefault());
 addEventListener('keydown', (e) => {
-  if (e.key === 'F2') { e.preventDefault(); settingsEl.hidden ? openSettings() : (settingsEl.hidden = true); return; }
+  if (e.key === 'F2') { e.preventDefault(); settingsOpen() ? closeSettings() : openSettings(); return; }
   if (!settings.kiosk) return;
   const k = e.key.toLowerCase();
   const blocked = ['f5', 'f3', 'f6', 'f7', 'f12', 'browserback', 'browserforward'].includes(k)
@@ -809,6 +829,13 @@ $('#loaderBar').style.width = '70%';
 Robot.onReady(() => {
   $('#loaderBar').style.width = '100%';
   setTimeout(() => { $('#loader').classList.add('hide'); layout(); }, 350);
+  // after the first frame: fetch what is needed later (QR codes, voice client, answers)
+  setTimeout(() => {
+    const qr = document.createElement('script');
+    qr.src = 'vendor/qrcode.js';
+    document.head.appendChild(qr);
+    voice.preload();
+  }, 600);
   Robot.setState('attract');
 });
 

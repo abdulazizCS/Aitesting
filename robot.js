@@ -1,5 +1,5 @@
-// 3D character "Jazi" (جازي): a friendly floating robot head — green body, dark
-// screen face with glowing eyes and an orange smile, yellow antenna and ears.
+// 3D character: the Jazan University smart assistant — a friendly floating robot head (green body, dark
+// screen face with glowing eyes and an orange smile, yellow antenna and ears).
 // This module only draws and animates the character; conversation, voice and the
 // interface live in app.js / voice.js and talk to it through the exported API.
 // (The previous character is kept in robot-mohammed.js.)
@@ -20,7 +20,7 @@ const clamp = THREE.MathUtils.clamp;
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
 renderer.setClearColor(0x000000, 0); // the animated identity background is drawn by CSS behind the canvas
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.5 : 1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LITE ? 1.25 : 1.5));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
@@ -41,7 +41,7 @@ scene.add(new THREE.HemisphereLight(0xb9d4ff, 0x0a1a30, 0.7));
 const key = new THREE.DirectionalLight(0xfff6ea, 2.0);
 key.position.set(1.6, 3.4, 3.2);
 key.castShadow = true;
-key.shadow.mapSize.set(LITE ? 1024 : 2048, LITE ? 1024 : 2048);
+key.shadow.mapSize.set(LITE ? 512 : 1024, LITE ? 512 : 1024);
 Object.assign(key.shadow.camera, { left: -1.2, right: 1.2, top: 2.6, bottom: 0, near: 0.5, far: 10 });
 key.shadow.bias = -0.0004;
 key.shadow.normalBias = 0.02;
@@ -138,7 +138,7 @@ const mesh = (geo, mat, parent, shadow = true) => {
 
 // head: soft rounded box with a green → teal gradient (vertex colours)
 const HW = 1.0, HH = 0.86, HD = 0.72;
-const headGeo = new RoundedBoxGeometry(HW, HH, HD, 8, 0.27);
+const headGeo = new RoundedBoxGeometry(HW, HH, HD, 6, 0.27);
 {
   const pos = headGeo.attributes.position, col = [];
   const c = new THREE.Color();
@@ -217,9 +217,14 @@ const faceState = {
   moodK: { happy: 1, surprised: 0, think: 0, sad: 0, listen: 0 },
 };
 
+let faceSig = '';
 function drawFace() {
   const g = fctx, W = faceCanvas.width, H = faceCanvas.height;
   const k = faceState.moodK, f = faceState;
+  // skip redrawing (and re-uploading the texture) when nothing visible changed
+  const sig = [f.blink, f.gx, f.gy, f.open, f.round, k.happy, k.surprised, k.think, k.sad, k.listen].map((v) => Math.round(v * 60)).join();
+  if (sig === faceSig) return;
+  faceSig = sig;
   g.clearRect(0, 0, W, H);
   g.save();
   g.beginPath();

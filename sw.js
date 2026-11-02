@@ -1,12 +1,8 @@
 // Offline support: keeps the app, the 3D library, fonts and the voice client cached
 // so the kiosk can restart without internet (the agent itself still needs a connection;
 // without it Mohammed answers from the local knowledge base).
-const CACHE = 'jazi-v2';
-const SHELL = [
-  './', 'index.html', 'style.css', 'app.js', 'robot.js', 'voice.js', 'brain.js', 'kb.js', 'content.js', 'quiz.js',
-  'logo.png', 'manifest.webmanifest', 'vendor/qrcode.js', 'vendor/three/three.module.js',
-  'vendor/three/addons/environments/RoomEnvironment.js', 'vendor/three/addons/geometries/RoundedBoxGeometry.js',
-];
+const CACHE = 'assistant-v3';
+const SHELL = ['./', 'index.html', 'style.css', 'dist/app.js', 'logo.png', 'manifest.webmanifest', 'vendor/qrcode.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
