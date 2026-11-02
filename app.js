@@ -57,11 +57,12 @@ function layout() {
   app.classList.toggle('landscape', !portrait);
   const dockH = $('.dock').offsetHeight;
   app.style.setProperty('--dock-h', `${dockH}px`);
-  const top = $('.topbar').offsetHeight;
-  // the robot fills the stage between the top bar and the dock (about 60% of a portrait screen)
+  const top = $('.topbar').offsetHeight + $('.options').offsetHeight;
+  app.style.setProperty('--top-h', `${top}px`);
+  // the robot fills the stage between the options at the top and the microphone bar
   let rect;
   if (portrait) {
-    rect = { x: 0, y: top * 0.6, w, h: h - dockH - top * 0.6 };
+    rect = { x: 0, y: top, w, h: h - dockH - top };
   } else {
     const cardW = w * 0.43;
     rect = { x: 0, y: top, w: w - cardW, h: h - dockH - top };
@@ -139,23 +140,39 @@ const Stats = {
 /* =====================================================================
  * Status, push-to-talk button, captions
  * ===================================================================== */
-const STATUS_TEXT = { idle: 'جاهز', connecting: 'يتصل...', ready: 'جاهز', listening: 'يستمع إليك', thinking: 'يفكر...', speaking: 'يتحدث' };
-const PTT_TEXT = {
-  idle: 'اضغط وتحدث مع محمد', ready: 'اضغط وتحدث مع محمد', connecting: 'لحظة، أجهّز الصوت...',
-  listening: 'أستمع إليك... اضغط للإرسال', thinking: 'محمد يفكر...', speaking: 'اضغط لمقاطعة محمد',
+const STATUS_TEXT = { idle: 'جاهز', connecting: 'يتصل...', ready: 'الميكروفون متوقف', listening: 'يستمع إليك', thinking: 'يفكر...', speaking: 'يتحدث' };
+const MIC_TEXT = {
+  idle: ['المس الشاشة للبدء', 'ثم تحدث مع محمد مباشرة'],
+  connecting: ['لحظة، أجهّز المحادثة...', ''],
+  listening: ['تحدث الآن، محمد يستمع', 'لا حاجة للضغط على أي زر'],
+  thinking: ['محمد يفكر...', ''],
+  speaking: ['محمد يتحدث', 'يمكنك مقاطعته بالكلام'],
+  ready: ['الميكروفون متوقف', 'المس هنا لتشغيله'],
 };
 let uiState = 'idle';
 function setUiState(s) {
   uiState = s;
   $('#status').dataset.state = s === 'ready' ? 'idle' : s;
   $('#statusText').textContent = STATUS_TEXT[s] || '';
-  const ptt = $('#pttBtn');
-  ptt.classList.toggle('listening', s === 'listening');
-  ptt.classList.toggle('thinking', s === 'thinking');
-  ptt.classList.toggle('speaking', s === 'speaking');
-  $('#pttLabel').textContent = PTT_TEXT[s] || PTT_TEXT.idle;
-  Robot.setState({ listening: 'listening', thinking: 'thinking', speaking: 'speaking' }[s] || (session.active ? 'idle' : 'attract'));
-  if (s === 'listening' || s === 'speaking') touch();
+  const mic = $('#micBtn');
+  for (const c of ['listening', 'thinking', 'speaking']) mic.classList.toggle(c, s === c);
+  mic.classList.toggle('muted', s === 'ready');
+  $('#micSlash').hidden = s !== 'ready';
+  const [label, hint] = MIC_TEXT[session.active ? s : 'idle'] || MIC_TEXT.idle;
+  $('#micLabel').textContent = label;
+  $('#micHint').textContent = hint;
+  Robot.setState({ thinking: 'thinking', speaking: 'speaking' }[s] || (session.active ? 'idle' : 'attract'));
+  if (s === 'speaking') touch();
+}
+
+// while listening hands-free, Mohammed turns attentive only when the visitor is actually talking
+let heardAt = 0;
+function micLoop() {
+  const lvl = voice?.connected ? voice.inputLevel() : 0;
+  if (lvl > 0.06) heardAt = performance.now();
+  $('#micBtn').style.setProperty('--lvl', (0.3 + Math.min(1, lvl * 4) * 2.2).toFixed(2));
+  if (uiState === 'listening') Robot.setState(performance.now() - heardAt < 1200 ? 'listening' : 'idle');
+  requestAnimationFrame(micLoop);
 }
 
 const captionEl = $('#caption');
@@ -287,6 +304,7 @@ const voice = createVoice({
     if (s === 'ready') hideCaption();
   },
   onUserText: (text) => {
+    touch();
     Stats.add('questions');
     Stats.add('voice');
     showCaption(text, 'user');
@@ -337,54 +355,53 @@ async function speakLocal(text) {
   lastAnswer = text;
   setUiState('speaking');
   showCaption(text, 'bot');
+  pauseLocalMic();
   await voice.speakLocal(text, Robot);
-  if (uiState === 'speaking') { setUiState(session.active ? 'ready' : 'idle'); hideCaption(); }
+  if (uiState === 'speaking') {
+    hideCaption();
+    if (session.active && !quiz.on) resumeLocalMic(); else setUiState(session.active ? 'ready' : 'idle');
+  }
 }
 
-/* push-to-talk: tap to start / tap to send, or hold while speaking */
-let pttDown = 0;
+/* hands-free listening without the agent: continuous browser speech recognition */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null;
-function localListen() {
-  if (!SR) { openKeyboard(); return; }
+let rec = null, localMicWanted = true, localMicPaused = false;
+function startLocalMic() {
+  if (!SR || rec || !session.active || voice.connected || quiz.on) return false;
   rec = new SR();
   rec.lang = 'ar-SA';
+  rec.continuous = true;
   rec.interimResults = true;
-  let finalText = '';
   rec.onresult = (e) => {
-    let interim = '';
+    let interim = '', finalText = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
       else interim += e.results[i][0].transcript;
     }
-    showCaption(finalText + interim, 'user');
+    if (interim) { heardAt = performance.now(); showCaption(interim, 'user'); }
+    if (finalText.trim()) { Stats.add('voice'); ask(finalText); }
   };
-  rec.onend = () => { rec = null; if (finalText.trim()) { Stats.add('voice'); ask(finalText); } else setUiState('ready'); };
-  rec.onerror = () => setUiState('ready');
-  voice.stopLocal();
-  setUiState('listening');
-  try { rec.start(); } catch { setUiState('ready'); }
+  // recognition stops by itself after silence: start it again while the visit goes on
+  rec.onend = () => { rec = null; if (session.active && localMicWanted && !localMicPaused && !quiz.on) setTimeout(startLocalMic, 300); };
+  rec.onerror = (e) => { if (e.error === 'not-allowed') { localMicWanted = false; setUiState('ready'); } };
+  try { rec.start(); setUiState('listening'); return true; } catch { rec = null; return false; }
 }
-// press: start listening. Release after a long press (hold-to-talk) or tap again: send.
-let startedThisPress = false;
-$('#pttBtn').addEventListener('pointerdown', async () => {
-  pttDown = performance.now();
-  startedThisPress = false;
+function stopLocalMic() { const r = rec; rec = null; r?.abort(); }
+function pauseLocalMic() { localMicPaused = true; stopLocalMic(); }
+function resumeLocalMic() {
+  localMicPaused = false;
+  if (localMicWanted && startLocalMic()) return;
+  setUiState(localMicWanted && SR ? 'listening' : 'ready');
+}
+
+// the microphone bar: start a visit, or mute / unmute the microphone
+$('#micBtn').addEventListener('click', async () => {
   if (!session.active) { await startSession(); return; }
-  if (uiState === 'listening') return;
-  startedThisPress = true;
-  Snd.play('listen');
-  hideCard();
-  if (voice.connected) voice.pttStart();
-  else localListen();
-});
-$('#pttBtn').addEventListener('pointerup', () => {
-  if (uiState !== 'listening') return;
-  const held = performance.now() - pttDown;
-  if (startedThisPress && held < 600) return; // a tap: keep listening until the next tap
-  Snd.play('send');
-  if (voice.connected) voice.pttStop();
-  else rec?.stop();
+  Snd.play('tap');
+  if (voice.connected) { voice.setMic(!voice.micOn); return; }
+  if (!SR) { openKeyboard(); return; }
+  localMicWanted = !localMicWanted;
+  if (localMicWanted) resumeLocalMic(); else { stopLocalMic(); setUiState('ready'); }
 });
 
 $('#replayBtn').addEventListener('click', () => {
@@ -429,8 +446,9 @@ async function startSession({ quiet = false } = {}) {
     // the agent says its own greeting when it connects (unless a topic was pressed)
     if (await voice.connect({ silent: quiet })) return;
   }
-  setUiState('ready');
-  if (!quiet) speakLocal(`السلام عليكم! أنا ${ROBOT_NAME}، مرشدك الافتراضي في جامعة جازان. اضغط الزر وتحدث معي، أو اختر موضوعاً من الأسفل.`);
+  localMicWanted = true;
+  if (quiet) resumeLocalMic();
+  else speakLocal(`السلام عليكم! أنا ${ROBOT_NAME}، مرشدك الافتراضي في جامعة جازان. اضغط الزر وتحدث معي، أو اختر موضوعاً من الأسفل.`);
 }
 
 async function endSession() {
@@ -439,7 +457,7 @@ async function endSession() {
   Stats.add('seconds', Math.round((Date.now() - session.started) / 1000));
   closeQuiz(false);
   closeKeyboard();
-  rec?.abort();
+  stopLocalMic();
   voice.stopLocal();
   await voice.disconnect();
   hideCard();
@@ -460,7 +478,7 @@ $('#homeBtn').addEventListener('click', () => { Snd.play('close'); endSession();
 // inactivity: warn, then return to the welcome screen (ends the visitor's session)
 let warnLeft = 0;
 setInterval(() => {
-  if (!session.active || ['listening', 'thinking', 'speaking', 'connecting'].includes(uiState)) { if (session.active) touch(); return; }
+  if (!session.active || ['thinking', 'speaking', 'connecting'].includes(uiState)) { if (session.active) touch(); return; }
   const idle = (Date.now() - session.lastTouch) / 1000;
   const warn = $('#idleWarn');
   if (idle > settings.idleSecs) {
@@ -539,6 +557,7 @@ async function startQuiz() {
   if (!session.active) await startSession({ quiet: true });
   // the quiz uses the built-in voice; pause the agent so it doesn't listen meanwhile
   if (voice.connected) await voice.disconnect();
+  pauseLocalMic();
   hideCard();
   closeKeyboard();
   Stats.add('quizzes');
@@ -618,7 +637,10 @@ function closeQuiz(resume = true) {
   quizEl.hidden = true;
   voice.stopLocal();
   setUiState('ready');
-  if (resume && session.active && USE_AGENT) voice.connect({ silent: true });
+  if (resume && session.active) {
+    if (USE_AGENT) voice.connect({ silent: true }).then((ok) => { if (!ok) resumeLocalMic(); });
+    else resumeLocalMic();
+  }
 }
 quizEl.addEventListener('click', (e) => {
   const b = e.target.closest('button');
@@ -682,7 +704,46 @@ $('#rotSeg').addEventListener('click', (e) => {
   openSettings();
   requestAnimationFrame(layout);
 });
-$('#volRange').addEventListener('input', (e) => { settings.volume = e.target.value / 100; voice.setVolume(settings.volume); save(); });
+$('#volRange').addEventListener('input', (e) => setVolume(e.target.value / 100));
+
+/* volume controls in the header */
+let volBeforeMute = 0.9;
+function setVolume(v) {
+  settings.volume = Math.round(Math.min(1, Math.max(0, v)) * 20) / 20;
+  voice.setVolume(settings.volume);
+  save();
+  updateVolumeUI();
+}
+function updateVolumeUI() {
+  const pct = Math.round(settings.volume * 100);
+  $('#volTop').value = pct;
+  $('#volLabel').textContent = `${pct}%`;
+  $('#muteBtn').textContent = pct === 0 ? '🔇' : pct < 50 ? '🔉' : '🔊';
+  $('#muteBtn').setAttribute('aria-label', pct === 0 ? 'تشغيل الصوت' : 'كتم الصوت');
+}
+$('#volTop').addEventListener('input', (e) => setVolume(e.target.value / 100));
+$('#volDown').addEventListener('click', () => { setVolume(settings.volume - 0.1); Snd.play('tick'); });
+$('#volUp').addEventListener('click', () => { setVolume(settings.volume + 0.1); Snd.play('tick'); });
+$('#muteBtn').addEventListener('click', () => {
+  if (settings.volume > 0) { volBeforeMute = settings.volume; setVolume(0); }
+  else setVolume(volBeforeMute || 0.9);
+});
+
+/* full-screen toggle in the header */
+const fsSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+function updateFsUI() {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  $('#fsTopBtn').hidden = !fsSupported;
+  $('#fsLabel').textContent = on ? 'خروج من ملء الشاشة' : 'ملء الشاشة';
+  $('#fsIcon').setAttribute('d', on ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5');
+}
+$('#fsTopBtn').addEventListener('click', () => {
+  Snd.play('tap');
+  if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  else enterFullscreen();
+});
+document.addEventListener('fullscreenchange', () => { updateFsUI(); requestAnimationFrame(layout); });
+document.addEventListener('webkitfullscreenchange', updateFsUI);
 $('#kioskChk').addEventListener('change', (e) => { settings.kiosk = e.target.checked; save(); if (settings.kiosk) enterFullscreen(); });
 $('#idleSecs').addEventListener('change', (e) => { settings.idleSecs = Math.max(20, +e.target.value || 60); save(); });
 $('#statsReset').addEventListener('click', () => { Stats.data = { sessions: 0, seconds: 0, questions: 0, voice: 0, quizzes: 0, topics: {} }; store.set('stats', Stats.data); $('#statsOut').textContent = Stats.text(); });
@@ -740,7 +801,10 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigat
  * Start-up
  * ===================================================================== */
 applyRotation();
+updateVolumeUI();
+updateFsUI();
 layout();
+micLoop();
 $('#loaderBar').style.width = '70%';
 Robot.onReady(() => {
   $('#loaderBar').style.width = '100%';

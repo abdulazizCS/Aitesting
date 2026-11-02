@@ -1,8 +1,8 @@
 // Voice for Mohammed.
 //  - Human voice: an ElevenLabs conversational agent (voice + knowledge base live on
 //    ElevenLabs; the page only needs the agent's public id, no secret key).
-//  - Push-to-talk: the microphone stays muted except while the visitor holds the
-//    talk button, so nearby visitors are not picked up.
+//  - Hands-free: once a visit starts the microphone stays open and the agent detects
+//    when the visitor starts and stops talking. The mic can be muted from the screen.
 //  - Fallback: the browser's own Arabic voice when the agent cannot be reached.
 
 const CLIENT_URL = 'https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.28.0/+esm';
@@ -15,6 +15,7 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
   let volume = 1;
   let pttTimer = 0, thinkTimer = 0;
   let pttOn = false;
+  let micOn = true;
 
   const set = (s) => { if (s !== state) { state = s; onState(s); } };
 
@@ -31,11 +32,17 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
         ...(silent ? { overrides: { agent: { firstMessage: '' } } } : {}),
         onModeChange: ({ mode }) => {
           if (mode === 'speaking') { clearTimeout(thinkTimer); set('speaking'); }
-          else set(pttOn ? 'listening' : 'ready');
+          else set(micOn || pttOn ? 'listening' : 'ready');
         },
         onMessage: ({ message, role, source }) => {
           if (!message) return;
-          if ((role || source) === 'user') onUserText(message);
+          if ((role || source) === 'user') {
+            onUserText(message);
+            // the visitor finished a sentence: show "thinking" until the answer starts
+            set('thinking');
+            clearTimeout(thinkTimer);
+            thinkTimer = setTimeout(() => { if (state === 'thinking') set(micOn ? 'listening' : 'ready'); }, THINK_TIMEOUT_MS);
+          }
           else onAgentText(message);
         },
         onDisconnect: () => {
@@ -46,9 +53,9 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
         },
         onError: (m) => console.warn('ElevenLabs:', m),
       });
-      conv.setMicMuted(true);
+      conv.setMicMuted(!micOn);
       conv.setVolume({ volume });
-      set('ready');
+      set(micOn ? 'listening' : 'ready');
       return true;
     } catch (err) {
       console.warn('ElevenLabs voice unavailable:', err);
@@ -93,7 +100,7 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
     conv.sendUserMessage(text);
     set('thinking');
     clearTimeout(thinkTimer);
-    thinkTimer = setTimeout(() => { if (state === 'thinking') set('ready'); }, THINK_TIMEOUT_MS);
+    thinkTimer = setTimeout(() => { if (state === 'thinking') set(micOn ? 'listening' : 'ready'); }, THINK_TIMEOUT_MS);
     return true;
   }
 
@@ -171,6 +178,13 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
   return {
     get state() { return state; },
     get connected() { return !!conv; },
+    get micOn() { return micOn; },
+    /** hands-free microphone on/off */
+    setMic(on) {
+      micOn = on;
+      conv?.setMicMuted(!on);
+      if (state === 'listening' || state === 'ready') set(on ? 'listening' : 'ready');
+    },
     connect, disconnect, pttStart, pttStop, sendText, lipSample, speakLocal, stopLocal, selfTest,
     /** microphone loudness 0..1 while listening (drives the button ring) */
     inputLevel() { try { return conv?.getInputVolume?.() ?? 0; } catch { return 0; } },
