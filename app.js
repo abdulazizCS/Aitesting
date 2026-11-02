@@ -34,6 +34,8 @@ const save = () => Object.entries(settings).forEach(([k, v]) => store.set(k, v))
 function applyRotation() {
   document.documentElement.classList.remove('rotation-90', 'rotation-180', 'rotation-270');
   if (settings.rotation) document.documentElement.classList.add(`rotation-${settings.rotation}`);
+  const lbl = document.getElementById('rotateLabel');
+  if (lbl) lbl.textContent = `${settings.rotation}°`;
 }
 const appSize = () => [app.clientWidth, app.clientHeight];
 // screen point -> point inside the (possibly rotated) app
@@ -659,6 +661,18 @@ $('#brand').addEventListener('pointerdown', () => {
 });
 ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => $('#brand').addEventListener(ev, () => { clearTimeout(pressTimer); $('#brand').classList.remove('pressing'); }));
 $('#settingsClose').addEventListener('click', () => { settingsEl.hidden = true; });
+function setRotation(r) {
+  settings.rotation = ((r % 360) + 360) % 360;
+  save();
+  applyRotation();
+  requestAnimationFrame(layout);
+}
+// visible rotate button: each press turns the page 90° (0 → 90 → 180 → 270)
+$('#rotateBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  Snd.play('tap');
+  setRotation(settings.rotation + 90);
+});
 $('#rotSeg').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
