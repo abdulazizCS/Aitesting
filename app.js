@@ -452,8 +452,68 @@ topicsEl.addEventListener('click', async (e) => {
 const session = { active: false, started: 0, ending: false, lastTouch: 0 };
 function touch() { session.lastTouch = Date.now(); }
 
+/* ---------------- password before the conversation ----------------
+ * Asked once after "ابدأ المحادثة"; stays unlocked until the browser is closed
+ * (or "قفل" in the settings tab). Only a SHA-256 hash is kept in the page.
+ * Note: this is a light gate for a public kiosk page, not server-side security. */
+const PASS_HASH = '1875e9921945f51e3f39d59b252c6b741597333583ecab95adcdbc431f2c79a6';
+const PASS_LEN = 6;
+const isUnlocked = () => { try { return sessionStorage.getItem('m-unlocked') === '1'; } catch { return false; } };
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+function askPassword() {
+  return new Promise((resolve) => {
+    const gate = $('#passGate'), dots = $('#passDots'), msg = $('#passMsg');
+    let code = '';
+    const draw = () => { dots.innerHTML = Array.from({ length: PASS_LEN }, (_, k) => `<i class="${k < code.length ? 'on' : ''}"></i>`).join(''); };
+    $('#passKeys').innerHTML = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok']
+      .map((k) => `<button type="button" data-k="${k}" class="${k === 'ok' ? 'ok' : ''}">${k === 'del' ? '⌫' : k === 'ok' ? '✓' : k}</button>`).join('');
+    const finish = (ok) => {
+      gate.hidden = true;
+      $('#passKeys').onpointerdown = null;
+      $('#passCancel').onclick = null;
+      resolve(ok);
+    };
+    const check = async () => {
+      if (crypto.subtle && await sha256(code) === PASS_HASH) {
+        try { sessionStorage.setItem('m-unlocked', '1'); } catch { /* storage unavailable */ }
+        Snd.play('right');
+        finish(true);
+        return;
+      }
+      Snd.play('wrong');
+      msg.textContent = 'كلمة المرور غير صحيحة، حاول مرة أخرى';
+      dots.classList.remove('shake');
+      void dots.offsetWidth;
+      dots.classList.add('shake');
+      code = '';
+      draw();
+    };
+    $('#passKeys').onpointerdown = (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      e.preventDefault();
+      touch();
+      const k = b.dataset.k;
+      msg.textContent = '';
+      if (k === 'del') code = code.slice(0, -1);
+      else if (k === 'ok') { check(); return; }
+      else if (code.length < PASS_LEN) { code += k; Snd.play('tick'); }
+      draw();
+      if (code.length === PASS_LEN) check();
+    };
+    $('#passCancel').onclick = () => { Snd.play('close'); finish(false); };
+    msg.textContent = '';
+    draw();
+    gate.hidden = false;
+  });
+}
+
 async function startSession({ quiet = false } = {}) {
   if (session.active) return;
+  if (!isUnlocked() && !(await askPassword())) return;
   Object.assign(session, { active: true, started: Date.now(), ending: false });
   touch();
   Stats.add('sessions');
@@ -838,6 +898,11 @@ $('#kioskChk').addEventListener('change', (e) => { settings.kiosk = e.target.che
 $('#idleSecs').addEventListener('change', (e) => { settings.idleSecs = Math.max(20, +e.target.value || 60); save(); });
 $('#statsReset').addEventListener('click', () => { Stats.data = { sessions: 0, seconds: 0, questions: 0, voice: 0, quizzes: 0, topics: {} }; store.set('stats', Stats.data); $('#statsOut').textContent = Stats.text(); });
 $('#reloadBtn').addEventListener('click', () => location.reload());
+$('#lockBtn').addEventListener('click', async () => {
+  try { sessionStorage.removeItem('m-unlocked'); } catch { /* storage unavailable */ }
+  closeSettings();
+  await endSession();
+});
 $('#testBtn').addEventListener('click', async () => {
   const out = $('#testOut');
   out.textContent = 'جارِ الاختبار...';

@@ -90,6 +90,18 @@
     </section>
   </div>
 
+  <!-- password before the conversation starts (numeric keypad, no device keyboard) -->
+  <div id="passGate" class="pass-gate" hidden>
+    <div class="pass-card" role="dialog" aria-modal="true" aria-labelledby="passTitle">
+      <div class="pass-lock" aria-hidden="true">🔒</div>
+      <h2 id="passTitle">أدخل كلمة المرور</h2>
+      <div class="pass-dots" id="passDots"></div>
+      <p class="pass-msg" id="passMsg" aria-live="assertive"></p>
+      <div class="pass-keys" id="passKeys"></div>
+      <button type="button" class="pass-cancel" id="passCancel">إلغاء</button>
+    </div>
+  </div>
+
   <div id="idleWarn" class="idle-warn" hidden>
     <b>هل ما زلت هنا؟</b>
     <span>سنعود للشاشة الرئيسية خلال <span id="idleCount">10</span> ثوانٍ</span>
@@ -139,6 +151,7 @@
       <div id="testOut" class="test-out"></div>
       <div class="set-row"><span>إحصاءات الاستخدام (على هذا الجهاز فقط)</span><button type="button" id="statsReset">تصفير</button></div>
       <div id="statsOut" class="stats-out"></div>
+      <div class="set-row"><span>قفل الصفحة (طلب كلمة المرور مجدداً)</span><button type="button" id="lockBtn">قفل</button></div>
       <div class="set-row"><span>إعادة تحميل الصفحة</span><button type="button" id="reloadBtn">إعادة تحميل</button></div>
     </section>
   </aside>

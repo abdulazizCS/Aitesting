@@ -528,6 +528,33 @@ html.rotation-180 #app { transform: rotate(180deg); }
 #app.landscape .ss { left: auto; right: calc(var(--u) * 3); width: 31cqw; top: calc(var(--u) * 16); }
 #app.landscape .start-btn { padding-inline: calc(var(--u) * 2.6) calc(var(--u) * 3.6); }
 
+/* ---------- password gate ---------- */
+.pass-gate { position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(4, 22, 46, .82); backdrop-filter: blur(8px); }
+.pass-card {
+  width: min(86cqw, calc(var(--u) * 56)); text-align: center;
+  padding: calc(var(--u) * 3.4) calc(var(--u) * 3);
+  border-radius: calc(var(--u) * 3.4);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+  animation: popIn .4s var(--spring);
+}
+.pass-lock { font-size: calc(var(--u) * 6); }
+.pass-card h2 { margin: calc(var(--u) * 1) 0 calc(var(--u) * 2); font-size: calc(var(--u) * 3.4); }
+.pass-dots { display: flex; justify-content: center; gap: calc(var(--u) * 1.6); direction: ltr; }
+.pass-dots i { width: calc(var(--u) * 2.6); height: calc(var(--u) * 2.6); border-radius: 50%; border: 2px solid var(--soft); transition: background .15s, transform .15s; }
+.pass-dots i.on { background: var(--gold); border-color: var(--gold); transform: scale(1.1); }
+.pass-dots.shake { animation: shake .4s; }
+.pass-msg { min-height: 1.6em; margin: calc(var(--u) * 1.4) 0; color: #ff9d94; font-size: calc(var(--u) * 2.1); }
+.pass-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--u) * 1.4); direction: ltr; }
+.pass-keys button {
+  height: calc(var(--u) * 9); border-radius: calc(var(--u) * 2.2);
+  font-size: calc(var(--u) * 3.8); font-weight: 700;
+  background: rgba(255, 255, 255, .08); border: 1px solid var(--line);
+  transition: background .1s, transform .1s;
+}
+.pass-keys button:active { transform: scale(.94); background: rgba(43, 182, 115, .3); }
+.pass-keys button.ok { color: #16324f; background: linear-gradient(125deg, #ffcf79, #ffb34c); border: 0; }
+.pass-cancel { margin-top: calc(var(--u) * 2); padding: calc(var(--u) * 1.2) calc(var(--u) * 4); border-radius: 999px; font-size: calc(var(--u) * 2.2); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); }
+
 /* ---------- idle warning, QR zoom, settings, loader ---------- */
 .idle-warn {
   position: absolute; z-index: 40; top: 40%; left: 50%; transform: translate(-50%, -50%);
