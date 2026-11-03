@@ -77,13 +77,17 @@
   <div id="quiz" class="quiz" hidden></div>
 
   <!-- welcome screen shown when nobody is using the kiosk -->
+  <!-- screensaver: shown when nobody is talking; explains the forum, with a start button in the middle -->
   <div id="attract" class="attract">
-    <div class="attract-card">
-      <span class="eyebrow"><span class="dot"></span>مرحباً بك في جامعة جازان</span>
-      <h1>أنا <span class="gradient">المساعدة الذكية</span><br>لجامعة جازان</h1>
-      <p>تحدث معي مباشرة عن الجامعة وخدماتها الرقمية وملتقى التحول الرقمي</p>
-      <div class="touch-hint"><span class="hand">👆</span> المس الشاشة للبدء</div>
-    </div>
+    <span class="eyebrow ss-eyebrow"><span class="dot"></span>مرحباً بك في ملتقى التحول الرقمي 2026</span>
+    <button type="button" class="start-btn" id="startBtn">
+      <span class="start-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+      <span class="start-text"><b>ابدأ المحادثة</b><small>تحدث مع المساعدة الذكية لجامعة جازان</small></span>
+    </button>
+    <section class="ss" id="ss" aria-live="polite">
+      <div class="ss-slides" id="ssSlides"></div>
+      <div class="ss-dots" id="ssDots"></div>
+    </section>
   </div>
 
   <div id="idleWarn" class="idle-warn" hidden>

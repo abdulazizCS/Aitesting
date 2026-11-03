@@ -6,7 +6,7 @@ import { createVoice } from './voice.js';
 // local answers + knowledge base load in the background so the first screen appears faster
 let brain = null;
 const brainReady = import('./brain.js').then((m) => { brain = m; return m; });
-import { TOPICS, CARDS } from './content.js';
+import { TOPICS, CARDS, FORUM_SLIDES } from './content.js';
 import { QUIZ } from './quiz.js';
 
 const $ = (s) => document.querySelector(s);
@@ -63,7 +63,14 @@ function layout() {
   app.style.setProperty('--top-h', `${top}px`);
   // the robot fills the stage between the options at the top and the microphone bar
   let rect;
-  if (portrait) {
+  app.classList.toggle('saver', !session.active);
+  if (!session.active) {
+    // screensaver: robot above the centred start button (portrait) or on the left (landscape)
+    const bar = $('.topbar').offsetHeight;
+    rect = portrait
+      ? { x: 0, y: bar * 1.5, w, h: h * 0.5 - $('#startBtn').offsetHeight / 2 - bar * 1.5 }
+      : { x: 0, y: bar, w: w * 0.3, h: h - bar };
+  } else if (portrait) {
     rect = { x: 0, y: top, w, h: h - dockH - top };
   } else {
     const cardW = w * 0.43;
@@ -452,6 +459,8 @@ async function startSession({ quiet = false } = {}) {
   Stats.add('sessions');
   Snd.play('start');
   $('#attract').classList.add('hide');
+  stopSlides();
+  requestAnimationFrame(layout);
   if (settings.kiosk) enterFullscreen();
   Robot.play('welcome');
   setUiState('idle');
@@ -484,9 +493,57 @@ async function endSession() {
   setUiState('idle');
   $('#attract').classList.remove('hide');
   Robot.setState('attract');
+  startSlides();
+  requestAnimationFrame(layout);
 }
 
-$('#attract').addEventListener('pointerdown', () => startSession());
+/* ---------------- screensaver slides about the forum ---------------- */
+const ssSlides = $('#ssSlides'), ssDots = $('#ssDots');
+const li = (n) => `style="--i:${n}"`;
+ssSlides.innerHTML = FORUM_SLIDES.map((sl) => {
+  const head = sl.type === 'hero' ? '' : `<h2><span>${sl.icon}</span>${esc(sl.title)}</h2>`;
+  let body = '';
+  if (sl.type === 'hero') body = `<h2>${esc(sl.title)}</h2><div class="slogan gradient">${esc(sl.slogan)}</div><div class="sub">${esc(sl.sub)}</div><div class="ss-chips">${sl.chips.map((c, n) => `<span ${li(n)}>${esc(c)}</span>`).join('')}</div>`;
+  else if (sl.type === 'text') body = `<p>${esc(sl.text)}</p>`;
+  else if (sl.type === 'stats') body = `<div class="ss-stats">${sl.items.map(([v, l], n) => `<div ${li(n)}><strong data-count="${v}">+0</strong><small>${esc(l)}</small></div>`).join('')}</div>`;
+  else if (sl.type === 'list') body = `<ol class="ss-list">${sl.items.map((t, n) => `<li ${li(n)}>${esc(t)}</li>`).join('')}</ol>`;
+  else if (sl.type === 'tiles') body = `<div class="ss-tiles">${sl.items.map(([ic, t], n) => `<div ${li(n)}><span>${ic}</span>${esc(t)}</div>`).join('')}</div>`;
+  else if (sl.type === 'chips') body = `<div class="ss-chips">${sl.items.map((t, n) => `<span ${li(n)}>${esc(t)}</span>`).join('')}</div>`;
+  return `<article class="slide ${sl.type}">${head}${body}</article>`;
+}).join('');
+ssDots.innerHTML = FORUM_SLIDES.map(() => '<i></i>').join('');
+let ssIndex = -1, ssTimer = 0;
+function showSlide(n) {
+  ssIndex = (n + FORUM_SLIDES.length) % FORUM_SLIDES.length;
+  ssSlides.querySelectorAll('.slide').forEach((el, k) => el.classList.toggle('on', k === ssIndex));
+  ssDots.querySelectorAll('i').forEach((el, k) => el.classList.toggle('on', k === ssIndex));
+  const slide = ssSlides.children[ssIndex];
+  slide.querySelectorAll('[data-count]').forEach((el) => {
+    const to = +el.dataset.count, t0 = performance.now();
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / 1400);
+      el.textContent = '+' + Math.round(to * (1 - (1 - p) ** 3)).toLocaleString('en-US');
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  // the robot turns to the slide now and then, as if presenting it
+  if (ssIndex % 2 === 1) Robot.play('point', { dir: isPortrait() ? 'down' : 'right' });
+}
+function startSlides() {
+  clearInterval(ssTimer);
+  showSlide(ssIndex + 1);
+  ssTimer = setInterval(() => showSlide(ssIndex + 1), 8000);
+}
+function stopSlides() { clearInterval(ssTimer); }
+
+// start button in the middle; touching a slide shows the next one; any other touch also starts
+$('#startBtn').addEventListener('click', (e) => { e.stopPropagation(); startSession(); });
+$('#attract').addEventListener('pointerdown', (e) => {
+  if (e.target.closest('#startBtn')) return;
+  if (e.target.closest('#ss')) { Snd.play('tap'); startSlides(); return; }
+  startSession();
+});
 $('#homeBtn').addEventListener('click', () => { Snd.play('close'); endSession(); });
 
 // inactivity: warn, then return to the welcome screen (ends the visitor's session)
@@ -849,6 +906,7 @@ Robot.onReady(() => {
     voice.preload();
   }, 600);
   Robot.setState('attract');
+  startSlides();
 });
 
 window.mohammed = { Robot, voice, startSession, endSession, startQuiz, ask, showCard, settings };
