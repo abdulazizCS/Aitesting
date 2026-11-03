@@ -350,6 +350,8 @@ async function ask(text, topicId) {
   if (topicId) Stats.topic(topicId);
   showCaption(text, 'user');
   Snd.play('send');
+  // buttons use the same ElevenLabs voice: reconnect first if the connection dropped
+  if (!voice.connected && USE_AGENT && !quiz.on) await voice.connect({ silent: true });
   if (voice.connected) {
     reactTo(text);
     voice.sendText(text);
@@ -563,12 +565,21 @@ const QUIZ_LEN = 5, QUIZ_SECS = 20;
 const quiz = { on: false, list: [], i: 0, score: 0, timer: 0, left: 0, locked: false };
 const quizEl = $('#quiz');
 const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
-const say = (t) => { lastAnswer = t; showCaption(t, 'bot'); setUiState('speaking'); return voice.speakLocal(t, Robot).then(() => { if (quiz.on && uiState === 'speaking') setUiState('ready'); }); };
+// quiz lines are spoken in the same ElevenLabs voice; the browser voice is only a fallback offline
+async function say(t) {
+  lastAnswer = t;
+  showCaption(t, 'bot');
+  if (voice.connected) { await voice.speakAgent(t); return; }
+  setUiState('speaking');
+  await voice.speakLocal(t, Robot);
+  if (quiz.on && uiState === 'speaking') setUiState('ready');
+}
 
 async function startQuiz() {
   if (!session.active) await startSession({ quiet: true });
-  // the quiz uses the built-in voice; pause the agent so it doesn't listen meanwhile
-  if (voice.connected) await voice.disconnect();
+  // keep the agent for its voice, but mute the microphone so visitors' talk doesn't interrupt the quiz
+  quiz.micWasOn = voice.connected ? voice.micOn : false;
+  if (voice.connected) voice.setMic(false);
   pauseLocalMic();
   hideCard();
   closeKeyboard();
@@ -650,7 +661,8 @@ function closeQuiz(resume = true) {
   voice.stopLocal();
   setUiState('ready');
   if (resume && session.active) {
-    if (USE_AGENT) voice.connect({ silent: true }).then((ok) => { if (!ok) resumeLocalMic(); });
+    if (voice.connected) voice.setMic(quiz.micWasOn !== false);
+    else if (USE_AGENT) voice.connect({ silent: true }).then((ok) => { if (!ok) resumeLocalMic(); });
     else resumeLocalMic();
   }
 }

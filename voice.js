@@ -8,6 +8,8 @@
 const CLIENT_URL = 'https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.28.0/+esm';
 const PTT_MAX_MS = 15000;      // a single question can't keep the mic open longer
 const THINK_TIMEOUT_MS = 12000; // give up waiting for an answer after this
+// prefix asking the agent to read a text exactly as written (quiz questions, feedback)
+const VERBATIM = 'اقرأ حرفياً:';
 
 export function createVoice({ agentId, onState = () => {}, onUserText = () => {}, onAgentText = () => {}, onDisconnect = () => {} }) {
   let conv = null;
@@ -17,7 +19,8 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
   let pttOn = false;
   let micOn = true;
 
-  const set = (s) => { if (s !== state) { state = s; onState(s); } };
+  const stateWaiters = new Set();
+  const set = (s) => { if (s !== state) { state = s; onState(s); stateWaiters.forEach((fn) => fn(s)); } };
 
   /** silent: start without the spoken greeting (e.g. returning from the quiz) */
   async function connect({ silent = false } = {}) {
@@ -37,6 +40,7 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
         onMessage: ({ message, role, source }) => {
           if (!message) return;
           if ((role || source) === 'user') {
+            if (message.startsWith(VERBATIM)) return; // our own "read this" request
             onUserText(message);
             // the visitor finished a sentence: show "thinking" until the answer starts
             set('thinking');
@@ -189,6 +193,21 @@ export function createVoice({ agentId, onState = () => {}, onUserText = () => {}
       if (state === 'listening' || state === 'ready') set(on ? 'listening' : 'ready');
     },
     connect, disconnect, pttStart, pttStop, sendText, lipSample, speakLocal, stopLocal, selfTest,
+    /** say a fixed text in the ElevenLabs voice; resolves when it has been spoken */
+    speakAgent(text) {
+      if (!conv) return Promise.resolve(false);
+      return new Promise((resolve) => {
+        let started = false;
+        const done = (ok) => { stateWaiters.delete(watch); clearTimeout(timer); resolve(ok); };
+        const watch = (s) => {
+          if (s === 'speaking') started = true;
+          else if (started || s === 'off') done(started);
+        };
+        const timer = setTimeout(() => done(started), 6000 + text.length * 120);
+        stateWaiters.add(watch);
+        conv.sendUserMessage(`${VERBATIM} ${text}`);
+      });
+    },
     /** download the voice client in the background so the first conversation starts faster */
     preload() { if (agentId) import(CLIENT_URL).catch(() => {}); },
     /** microphone loudness 0..1 while listening (drives the button ring) */
